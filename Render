@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: orderflow-test
+    runtime: python
+    region: singapore
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: WISHLIST
+        value: BTC,ETH
+      - key: VENUES
+        value: binance,bybit,okx,bitget,delta,coindcx,deribit
+      - key: LIVE
+        value: "1"
