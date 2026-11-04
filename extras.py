@@ -5,7 +5,7 @@ import collector as c
 
 log = logging.getLogger("extras")
 FAPI = "https://fapi.binance.com"
-RET_MS = {"trades": 864e5, "book": 864e5, "liqs": 7 * 864e5, "funding": 7 * 864e5, "oi": 7 * 864e5,
+RET_MS = {"trades": 7 * 864e5, "flow": 14 * 864e5, "book": 864e5, "liqs": 7 * 864e5, "funding": 7 * 864e5, "oi": 7 * 864e5,
           "options": 7 * 864e5, "ls": 30 * 864e5, "scan": 7 * 864e5, "klines": 30 * 864e5}
 
 
@@ -140,4 +140,3 @@ async def purge(sink, every=3600):
     while True:
         await asyncio.sleep(every)
         purge_now(sink)
-      

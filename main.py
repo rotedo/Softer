@@ -12,21 +12,33 @@ def cfg():
     return wish, venues
 
 
+async def guard(coro):
+    """one crashing job must never take the others down"""
+    name = getattr(coro, "__qualname__", "task")
+    try:
+        await coro
+    except Exception as e:
+        logging.exception("job crashed: %s", name)
+        s = c.stat(f"crash-{name}", "rest")
+        s["errors"] += 1
+        s["last_err"] = f"{type(e).__name__}: {e}"[:80]
+
+
 async def main():
     wish, venues = cfg()
     db, port = os.environ.get("DB_PATH", "orderflow.db"), int(os.environ.get("PORT", "10000"))
-    sink, state = c.Sink(db), {"live": os.environ.get("LIVE", "0") == "1"}
+    sink, state = c.Sink(db, whale_usd=float(os.environ.get("WHALE_USD", "50000")), flow_bps=float(os.environ.get("FLOW_BPS", "3"))), {"live": os.environ.get("LIVE", "0") == "1"}
     web.start_server(db, state, port)
     tasks = [sink.flusher(), x.purge(sink), ex.ctval_loop()]
     tasks += [ex.run_rest(sink, f, state) for f in ex.rest_feeds(wish, venues)]
     tasks += [c.ws_run(sink, **w) for w in ex.ws_feeds(wish, venues)]
     if "coindcx" in venues:
-        tasks.append(ex.tier_scan_dcx(sink, state))
+        tasks.append(ex.tier_scan_dcx(sink, state, inr=float(os.environ.get("DCX_INR", "100000")), max_bps=float(os.environ.get("DCX_MAX_BPS", "10"))))
     if "deribit" in venues:
         c.stat("rest-deribit", "rest")["max_age_s"] = 700
         tasks.append(x.poll_deribit(sink))
     logging.info("wishlist=%s venues=%s live=%s", wish, sorted(venues), state["live"])
-    await asyncio.gather(*tasks)
+    await asyncio.gather(*[guard(t) for t in tasks])
 
 
 async def probe():

@@ -14,6 +14,13 @@ services:
         value: BTC,ETH
       - key: VENUES
         value: binance,bybit,okx,bitget,delta,coindcx,deribit
+      - key: DCX_INR
+        value: "100000"
+      - key: DCX_MAX_BPS
+        value: "10"
+      - key: WHALE_USD
+        value: "50000"
+      - key: FLOW_BPS
+        value: "3"
       - key: LIVE
         value: "1"
-        

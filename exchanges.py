@@ -71,7 +71,7 @@ def w_binance(m):
     d = m.get("data", m)
     e = d.get("e")
     if e == "aggTrade":
-        return [("trades", (d["T"], "binance", "perp", d["s"], float(d["p"]), float(d["q"]), "sell" if d["m"] else "buy", str(d["a"])))]
+        return [("trades", (d["T"], "binance", "perp", d["s"], float(d["p"]), float(d["q"]), "sell" if d["m"] else "buy", str(d["a"]))) ]
     if e == "forceOrder":
         o = d["o"]
         if not o["s"].endswith("USDT"):
@@ -129,7 +129,7 @@ def p_ok_oi(d, ts):
 
 def p_ok_fund(d, ts, inst):
     i = d["data"][0]
-    return [("funding", (ts, "okx", osym(inst), fo(i["fundingRate"]), None, None, fo(i["nextFundingTime"])))]
+    return [("funding", (ts, "okx", osym(inst), fo(i["fundingRate"]), None, None, fo(i["nextFundingTime"]))) ]
 
 
 def p_ok_depth(d, ts, inst):
@@ -152,10 +152,10 @@ def p_ok_ls(d, ts, base):
 def w_okx(m):
     ch, out = m.get("arg", {}).get("channel"), []
     if ch == "trades":
-        for i in m["data"]:
+        for i in m.get("data", []):
             out.append(("trades", (int(i["ts"]), "okx", "perp", osym(i["instId"]), float(i["px"]), float(i["sz"]) * ct("okx", i["instId"]), i["side"], i["tradeId"])))
     elif ch == "liquidation-orders":
-        for r in m["data"]:
+        for r in m.get("data", []):
             if not r["instId"].endswith("-USDT-SWAP"):
                 continue
             for dt in r.get("details", []):
@@ -208,10 +208,20 @@ def p_dl_tickers(d, ts):
     return out
 
 
+def _dl_lv(levels, m):
+    out = []
+    for l in levels:
+        if isinstance(l, dict):
+            p, q = l.get("limit_price", l.get("price")), l.get("size", l.get("quantity"))
+        else:
+            p, q = l[0], l[1]
+        out.append((float(p), float(q) * m))
+    return out
+
+
 def p_dl_depth(d, ts, raw):
     r, m = d["result"], ct("delta", raw)
-    return book_row(ts, "delta", dsym(raw), [(float(l["limit_price"]), float(l["size"]) * m) for l in r["buy"]],
-                    [(float(l["limit_price"]), float(l["size"]) * m) for l in r["sell"]])
+    return book_row(ts, "delta", dsym(raw), _dl_lv(r["buy"], m), _dl_lv(r["sell"], m))
 
 
 def p_dl_kl(d, ts, raw):
@@ -274,7 +284,8 @@ def dcx_pair_list(ins):
 
 async def tier_scan_dcx(sink, state, inr=100_000, max_bps=10, every=900, once=False, get=c.aget, delay=0.15):
     """Tier 1: CoinDCX futures pairs where a Rs `inr` market order slips <= max_bps on both sides. 15m candles for passers."""
-    c.stat("rest-coindcx-scan", "rest")["max_age_s"] = every * 2 + 120
+    for n in ("scan", "instruments", "ticker", "depth", "klines"):
+        c.stat(f"rest-coindcx-{n}", "rest")["max_age_s"] = every * 2 + 120
     while True:
         try:
             pairs = dcx_pair_list(await get(f"{DCX}/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]=USDT", "rest-coindcx-instruments"))
@@ -321,6 +332,8 @@ async def load_ctvals(get=c.aget):
 
 
 async def ctval_loop(get=c.aget):
+    for n in ("rest-okx-instruments", "rest-delta-products"):
+        c.stat(n, "rest")["max_age_s"] = 13 * 3600
     while True:
         try:
             await load_ctvals(get)
@@ -334,26 +347,29 @@ def rest_feeds(wish, venues):
     """Each feed: poll `url` (str or callable) and parse -> rows. live/lite = poll seconds when live-watching vs idle."""
     F = []
 
-    def add(v, ep, url, parse, live, lite):
-        F.append(dict(name=f"rest-{v}-{ep}", venue=v, url=url, parse=parse, live=live, lite=lite))
+    wsyms = {b + "USDT" for b in wish}
+
+    def add(v, ep, url, parse, live, lite, bulk=False):
+        # bulk = all-symbol endpoint: wishlist symbols stored every poll, every other symbol only every 5 min (keeps DB small)
+        F.append(dict(name=f"rest-{v}-{ep}", venue=v, url=url, parse=parse, live=live, lite=lite, bulk=wsyms if bulk else None))
     P = functools.partial
     if "binance" in venues:
-        add("binance", "funding", f"{BN}/fapi/v1/premiumIndex", p_bn_premium, 30, 300)
+        add("binance", "funding", f"{BN}/fapi/v1/premiumIndex", p_bn_premium, 30, 300, bulk=True)
         for b in wish:
             s = b + "USDT"
-            add("binance", f"book-{b}", f"{BN}/fapi/v1/depth?symbol={s}&limit=100", P(p_bn_depth, sym=s), 2, 30)
+            add("binance", f"book-{b}", f"{BN}/fapi/v1/depth?symbol={s}&limit=100", P(p_bn_depth, sym=s), 3, 30)
             add("binance", f"oi-{b}", f"{BN}/fapi/v1/openInterest?symbol={s}", p_bn_oi, 10, 120)
             add("binance", f"kl-{b}", f"{BN}/fapi/v1/klines?symbol={s}&interval=15m&limit=3", P(p_bn_kl, sym=s), 60, 900)
             add("binance", f"ls-{b}", f"{BN}/futures/data/globalLongShortAccountRatio?symbol={s}&period=5m&limit=1", P(p_bn_ls, sym=s), 60, 300)
     if "bybit" in venues:
-        add("bybit", "tickers", f"{BY}/v5/market/tickers?category=linear", p_by_tickers, 10, 120)
+        add("bybit", "tickers", f"{BY}/v5/market/tickers?category=linear", p_by_tickers, 10, 120, bulk=True)
         for b in wish:
             s = b + "USDT"
             add("bybit", f"book-{b}", f"{BY}/v5/market/orderbook?category=linear&symbol={s}&limit=50", P(p_by_depth, sym=s), 2, 30)
             add("bybit", f"kl-{b}", f"{BY}/v5/market/kline?category=linear&symbol={s}&interval=15&limit=3", P(p_by_kl, sym=s), 60, 900)
             add("bybit", f"ls-{b}", f"{BY}/v5/market/account-ratio?category=linear&symbol={s}&period=5min&limit=1", P(p_by_ls, sym=s), 60, 300)
     if "okx" in venues:
-        add("okx", "oi", f"{OK}/api/v5/public/open-interest?instType=SWAP", p_ok_oi, 15, 120)
+        add("okx", "oi", f"{OK}/api/v5/public/open-interest?instType=SWAP", p_ok_oi, 15, 120, bulk=True)
         for b in wish:
             i = f"{b}-USDT-SWAP"
             add("okx", f"book-{b}", f"{OK}/api/v5/market/books?instId={i}&sz=50", P(p_ok_depth, inst=i), 2, 30)
@@ -361,13 +377,13 @@ def rest_feeds(wish, venues):
             add("okx", f"kl-{b}", f"{OK}/api/v5/market/candles?instId={i}&bar=15m&limit=3", P(p_ok_kl, inst=i), 60, 900)
             add("okx", f"ls-{b}", f"{OK}/api/v5/rubik/stat/contracts/long-short-account-ratio?ccy={b}&period=5m&limit=1", P(p_ok_ls, base=b), 60, 300)
     if "bitget" in venues:
-        add("bitget", "tickers", f"{BG}/api/v2/mix/market/tickers?productType=USDT-FUTURES", p_bg_tickers, 10, 120)
+        add("bitget", "tickers", f"{BG}/api/v2/mix/market/tickers?productType=USDT-FUTURES", p_bg_tickers, 10, 120, bulk=True)
         for b in wish:
             s = b + "USDT"
             add("bitget", f"book-{b}", f"{BG}/api/v2/mix/market/merge-depth?symbol={s}&productType=USDT-FUTURES&limit=50", P(p_bg_depth, sym=s), 2, 30)
             add("bitget", f"kl-{b}", f"{BG}/api/v2/mix/market/candles?symbol={s}&productType=USDT-FUTURES&granularity=15m&limit=3", P(p_bg_kl, sym=s), 60, 900)
     if "delta" in venues:
-        add("delta", "tickers", f"{DL}/v2/tickers?contract_types=perpetual_futures", p_dl_tickers, 10, 120)
+        add("delta", "tickers", f"{DL}/v2/tickers?contract_types=perpetual_futures", p_dl_tickers, 10, 120, bulk=True)
         for b in wish:
             r = b + "USD"
             add("delta", f"book-{b}", f"{DL}/v2/l2orderbook/{r}?depth=50", P(p_dl_depth, raw=r), 2, 30)
@@ -411,14 +427,23 @@ async def run_rest(sink, feed, state, once=False, get=c.aget):
             d = await get(feed["url"], feed["name"])
             try:
                 rows = feed["parse"](d, c.now())
+                if feed.get("bulk") is not None:
+                    t = c.now()
+                    full = t - st.get("last_full", 0) >= 300_000
+                    if full:
+                        st["last_full"] = t
+                    rows = [r for r in rows if full or r[1][2] in feed["bulk"]]
                 if rows:
                     sink.put(rows)
                 st["rows"] = len(rows)
             except Exception as e:
                 st["errors"] += 1
                 st["last_err"] = f"parse: {type(e).__name__} {e}"[:80]
-        except Exception:
-            pass  # aget already recorded error + last_err
+        except Exception as e:
+            if "418" in str(e) or "429" in str(e):  # exchange rate-limit / temporary IP ban: back off hard
+                if once:
+                    return
+                await asyncio.sleep(120)
         if once:
             return
         await asyncio.sleep(feed["live"] if state.get("live") else feed["lite"])
