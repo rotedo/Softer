@@ -14,8 +14,8 @@ def snapshot(db, state):
         con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=2)
         for n in TABLES:
             rows = con.execute(f"SELECT max(rowid) FROM {n}").fetchone()[0] or 0
-            last = con.execute(f"SELECT ts FROM {n} ORDER BY rowid DESC LIMIT 1").fetchone()
-            tb[n] = {"rows": rows, "age_s": round((t - last[0]) / 1000, 1) if last else None}
+            last = con.execute(f"SELECT max(ts) FROM {n}").fetchone()[0]
+            tb[n] = {"rows": rows, "age_s": round((t - last) / 1000, 1) if last else None}
         for tb_name in ("ls", "klines"):  # per-venue freshness for the small tables
             tb[tb_name]["by_venue_age_s"] = {v: round((t - ts) / 1000) for v, ts in con.execute(f"SELECT venue, max(ts) FROM {tb_name} GROUP BY venue")}
         con.close()

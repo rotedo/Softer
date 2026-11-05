@@ -195,7 +195,11 @@ async def ws_run(sink, name, url, subs, parse, app_ping=None, ping_every=20):
                 if app_ping:
                     pinger = asyncio.create_task(_app_ping(ws, app_ping, ping_every))
                 backoff = 1
-                async for raw in ws:
+                while True:
+                    try:
+                        raw = await asyncio.wait_for(ws.recv(), timeout=90)
+                    except asyncio.TimeoutError:
+                        raise RuntimeError("no data for 90s, reconnecting")
                     if raw in ("pong", b"pong"):
                         continue
                     try:

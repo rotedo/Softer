@@ -143,7 +143,7 @@ def p_ok_kl(d, ts, inst):  # [ts,o,h,l,c,vol(contracts),volCcy(base),volCcyQuote
 
 def p_ok_ls(d, ts, base):
     out = []
-    for r in d["data"]:
+    for r in sorted(d["data"], key=lambda r: int(r[0]))[-1:]:  # newest 5m bucket only
         q = fo(r[1])
         out.append(("ls", (int(r[0]), "okx", base + "USDT", q, q / (1 + q), 1 / (1 + q))))
     return out
@@ -282,7 +282,7 @@ def dcx_pair_list(ins):
     return [p for p in pairs if p and p.startswith("B-") and p.endswith("_USDT")]
 
 
-async def tier_scan_dcx(sink, state, inr=100_000, max_bps=10, every=900, once=False, get=c.aget, delay=0.15):
+async def tier_scan_dcx(sink, state, inr=1_000_000, max_bps=10, every=900, once=False, get=c.aget, delay=0.15):
     """Tier 1: CoinDCX futures pairs where a Rs `inr` market order slips <= max_bps on both sides. 15m candles for passers."""
     for n in ("scan", "instruments", "ticker", "depth", "klines"):
         c.stat(f"rest-coindcx-{n}", "rest")["max_age_s"] = every * 2 + 120
@@ -401,7 +401,7 @@ def ws_feeds(wish, venues):
     W = []
     if "binance" in venues:
         st = "/".join(f"{b.lower()}usdt@aggTrade" for b in wish) + "/!forceOrder@arr"
-        W.append(dict(name="ws-binance", url=f"wss://fstream.binance.com/stream?streams={st}", subs=[], parse=w_binance))
+        W.append(dict(name="ws-binance", url=f"wss://fstream.binance.com/market/stream?streams={st}", subs=[], parse=w_binance))
     if "bybit" in venues:
         a = [f"publicTrade.{b}USDT" for b in wish] + [f"allLiquidation.{b}USDT" for b in wish]
         W.append(dict(name="ws-bybit", url="wss://stream.bybit.com/v5/public/linear", subs=[{"op": "subscribe", "args": a}], parse=w_bybit, app_ping={"op": "ping"}))

@@ -29,11 +29,15 @@ async def main():
     db, port = os.environ.get("DB_PATH", "orderflow.db"), int(os.environ.get("PORT", "10000"))
     sink, state = c.Sink(db, whale_usd=float(os.environ.get("WHALE_USD", "50000")), flow_bps=float(os.environ.get("FLOW_BPS", "3"))), {"live": os.environ.get("LIVE", "0") == "1"}
     web.start_server(db, state, port)
+    try:
+        await ex.load_ctvals()  # contract sizes must exist before the first parse
+    except Exception as e:
+        logging.warning("ctval preload failed: %s", e)
     tasks = [sink.flusher(), x.purge(sink), ex.ctval_loop()]
     tasks += [ex.run_rest(sink, f, state) for f in ex.rest_feeds(wish, venues)]
     tasks += [c.ws_run(sink, **w) for w in ex.ws_feeds(wish, venues)]
     if "coindcx" in venues:
-        tasks.append(ex.tier_scan_dcx(sink, state, inr=float(os.environ.get("DCX_INR", "100000")), max_bps=float(os.environ.get("DCX_MAX_BPS", "10"))))
+        tasks.append(ex.tier_scan_dcx(sink, state, inr=float(os.environ.get("DCX_INR", "1000000")), max_bps=float(os.environ.get("DCX_MAX_BPS", "10"))))
     if "deribit" in venues:
         c.stat("rest-deribit", "rest")["max_age_s"] = 700
         tasks.append(x.poll_deribit(sink))

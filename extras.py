@@ -128,15 +128,23 @@ async def poll_ls(sink, symbols, every=300, once=False, get=aget):
         await asyncio.sleep(every)
 
 
-def purge_now(sink):
+def purge_now(sink, batch=20000):
+    """Delete rows past retention in small batches so the writer lock is never held for long."""
     t = c.now()
-    with sink.lock:  # sink.db is shared with the flusher thread
-        for tbl, ms in RET_MS.items():
-            sink.db.execute(f"DELETE FROM {tbl} WHERE ts<?", (t - ms,))
-        sink.db.commit()
+    for tbl, ms in RET_MS.items():
+        while True:
+            with sink.lock:  # sink.db is shared with the flusher thread
+                cur = sink.db.execute(
+                    f"DELETE FROM {tbl} WHERE rowid IN (SELECT rowid FROM {tbl} WHERE ts<? LIMIT ?)",
+                    (t - ms, batch))
+                sink.db.commit()
+            if cur.rowcount < batch:
+                break
+            time.sleep(0.05)
 
 
 async def purge(sink, every=3600):
+    loop = asyncio.get_running_loop()
     while True:
         await asyncio.sleep(every)
-        purge_now(sink)
+        await loop.run_in_executor(None, purge_now, sink)
