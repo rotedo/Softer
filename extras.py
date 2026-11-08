@@ -128,6 +128,37 @@ async def poll_ls(sink, symbols, every=300, once=False, get=aget):
         await asyncio.sleep(every)
 
 
+# table -> (columns that identify one series, bucket size in ms). Older than THIN_AFTER_MS keeps 1 row per series per bucket.
+THIN = {
+    "book": ("venue, sym", 60_000),
+    "funding": ("venue, sym", 300_000),
+    "oi": ("venue, sym", 300_000),
+    "options": ("venue, name", 1_800_000),
+}
+THIN_AFTER_MS = 2 * 86_400_000
+_THIN_DONE = {}  # table -> end of the last window already thinned
+
+
+def thin_now(sink, win=3_600_000):
+    """Thin one-hour windows older than THIN_AFTER_MS. Releases the writer lock between windows."""
+    t_end = c.now() - THIN_AFTER_MS
+    for tbl, (cols, bucket) in THIN.items():
+        t0 = _THIN_DONE.get(tbl)
+        if t0 is None:  # first run: start at the oldest row we still keep
+            t0 = c.now() - RET_MS.get(tbl, 7 * 86_400_000)
+        while t0 + win <= t_end:
+            t1 = t0 + win
+            with sink.lock:
+                sink.db.execute(
+                    f"DELETE FROM {tbl} WHERE ts>=? AND ts<? AND rowid NOT IN "
+                    f"(SELECT min(rowid) FROM {tbl} WHERE ts>=? AND ts<? GROUP BY {cols}, ts/{bucket})",
+                    (t0, t1, t0, t1))
+                sink.db.commit()
+            t0 = t1
+            _THIN_DONE[tbl] = t0
+            time.sleep(0.05)
+
+
 def purge_now(sink, batch=20000):
     """Delete rows past retention in small batches so the writer lock is never held for long."""
     t = c.now()
@@ -148,3 +179,4 @@ async def purge(sink, every=3600):
     while True:
         await asyncio.sleep(every)
         await loop.run_in_executor(None, purge_now, sink)
+        await loop.run_in_executor(None, thin_now, sink)
