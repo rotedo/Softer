@@ -1,8 +1,9 @@
 """Health + latency JSON API and tiny auto-refresh dashboard (stdlib only)."""
-import json, sqlite3, threading, time
+import json, os, sqlite3, subprocess, threading, time
 from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import collector as c
+import api
 
 TABLES = c.TABLES
 START = time.time()
@@ -26,6 +27,32 @@ def snapshot(db, state):
     return {"uptime_s": int(time.time() - START), "feeds": feeds, "tables": tb, "live": bool(state.get("live")), "tier1_count": len(t1), "tier1": t1[:60]}
 
 
+def diag(db):
+    """read-only: restarts, memory, OOM kills, db size"""
+    def sh(cmd):
+        try:
+            return subprocess.run(cmd, capture_output=True, text=True, timeout=4).stdout.strip()
+        except Exception as e:
+            return f"n/a ({e})"
+    mem = {}
+    try:
+        for ln in open("/proc/meminfo"):
+            k, v = ln.split(":")
+            if k in ("MemTotal", "MemAvailable", "SwapTotal", "SwapFree"):
+                mem[k] = f"{int(v.split()[0]) // 1024} MB"
+    except OSError:
+        pass
+    size = {}
+    for f in (db, os.path.join(os.path.dirname(os.path.abspath(db)), "app.db")):
+        try:
+            size[os.path.basename(f)] = f"{os.path.getsize(f) / 1e6:.1f} MB"
+        except OSError:
+            pass
+    return {"restarts": sh(["systemctl", "show", "orderflow", "-p", "NRestarts", "--value"]), "since": sh(["systemctl", "show", "orderflow", "-p", "ActiveEnterTimestamp", "--value"]),
+            "memory": mem, "db": size, "oom": sh(["journalctl", "-k", "-g", "Out of memory", "--no-pager", "-n", "5"]),
+            "journal": sh(["journalctl", "-u", "orderflow", "--no-pager", "-n", "25"]) }
+
+
 PAGE = """<!doctype html><meta name=viewport content="width=device-width,initial-scale=1"><title>orderflow health</title>
 <style>body{font:14px monospace;background:#111;color:#ddd;padding:8px}td,th{padding:3px 8px;text-align:left}.ok{color:#4c4}.bad{color:#e55}</style>
 <h3>Feeds</h3><table id=f></table><h3>Tables</h3><table id=t></table><h3 id=h></h3><div id=t1></div>
@@ -45,21 +72,50 @@ r();setInterval(r,2000);
 
 
 def start_server(db, state, port):
+    api.HEALTH = lambda: snapshot(db, state)
+    here = os.path.dirname(os.path.abspath(__file__))
+
     class H(BaseHTTPRequestHandler):
+        def _send(self, code, ct, body, extra=None):
+            self.send_response(code)
+            self.send_header("Content-Type", ct)
+            self.send_header("Content-Length", str(len(body)))
+            for k, v in (extra or {}).items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _api(self, method):
+            n = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(min(n, 1_000_000)) if n else b""
+            ip = self.headers.get("X-Real-IP") or self.client_address[0]
+            self._send(*api.handle(method, self.path, dict(self.headers), body, ip))
+
+        def do_POST(self):
+            self._api("POST") if self.path.startswith("/api/") else self._send(404, "text/plain", b"not found")
+
+        def do_DELETE(self):
+            self._api("DELETE") if self.path.startswith("/api/") else self._send(404, "text/plain", b"not found")
+
         def do_GET(self):
+            if self.path.startswith("/api/"):
+                return self._api("GET")
             if self.path.startswith("/mode"):
                 q = parse_qs(urlparse(self.path).query)
                 if "live" in q:
                     state["live"] = q["live"][0] in ("1", "true", "on")
-                body, ct = json.dumps({"live": bool(state.get("live"))}).encode(), "application/json"
-            elif self.path.startswith("/health"):
-                body, ct = json.dumps(snapshot(db, state)).encode(), "application/json"
-            else:
-                body, ct = PAGE.encode(), "text/html"
-            self.send_response(200)
-            self.send_header("Content-Type", ct)
-            self.end_headers()
-            self.wfile.write(body)
+                return self._send(200, "application/json", json.dumps({"live": bool(state.get("live"))}).encode())
+            if self.path.startswith("/diag"):
+                return self._send(200, "application/json", json.dumps(diag(db), indent=1).encode())
+            if self.path.startswith("/app"):
+                try:
+                    with open(os.path.join(here, "app.html"), "rb") as f:
+                        return self._send(200, "text/html; charset=utf-8", f.read())
+                except OSError:
+                    return self._send(404, "text/plain", b"app.html not found")
+            if self.path.startswith("/health"):
+                return self._send(200, "application/json", json.dumps(snapshot(db, state)).encode())
+            self._send(200, "text/html", PAGE.encode())
 
         def log_message(self, *a):
             pass

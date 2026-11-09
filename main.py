@@ -1,7 +1,7 @@
 """Entry point.  python main.py          -> run collector + health dashboard
                 python main.py probe    -> hit every endpoint once, print what parsed / what failed, exit"""
 import asyncio, logging, os, sys
-import collector as c, extras as x, exchanges as ex, web
+import collector as c, extras as x, exchanges as ex, web, jobs
 
 ALL = "binance,bybit,okx,bitget,delta,coindcx,deribit"
 
@@ -33,7 +33,7 @@ async def main():
         await ex.load_ctvals()  # contract sizes must exist before the first parse
     except Exception as e:
         logging.warning("ctval preload failed: %s", e)
-    tasks = [sink.flusher(), x.purge(sink), ex.ctval_loop()]
+    tasks = [sink.flusher(), x.purge(sink), ex.ctval_loop(), jobs.loop()]
     tasks += [ex.run_rest(sink, f, state) for f in ex.rest_feeds(wish, venues)]
     tasks += [c.ws_run(sink, **w) for w in ex.ws_feeds(wish, venues)]
     if "coindcx" in venues:
