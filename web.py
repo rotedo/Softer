@@ -66,7 +66,7 @@ let t='<tr><th>table<th>rows<th>last row age s</tr>';
 for(const[k,v]of Object.entries(d.tables))t+=`<tr><td>${k}<td>${v.rows??v}<td>${v.age_s??'-'}</tr>`;
 document.getElementById('t').innerHTML=t;
 document.getElementById('h').textContent='uptime '+d.uptime_s+'s | mode: '+(d.live?'LIVE':'lite')+' (/mode?live=1 or 0) | tier1 pairs: '+d.tier1_count;
-document.getElementById('t1').textContent=d.tier1.join(' ');}catch(e){}}
+document.getElementById('t1').textContent=d.tier1.join(' ');}catch(e){} }
 r();setInterval(r,2000);
 </script>"""
 
