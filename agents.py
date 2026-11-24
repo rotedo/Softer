@@ -5,7 +5,7 @@ Settings that matter (all done here, in the API call - this is what the Gemini *
   * system prompt: answer ONLY from tool results, say "data not available" otherwise
   * several keys: keys added in the app\u0027s Settings screen first (chat, then backup), then config.py / env keys (on 429 / 5xx / network error / blocked key)
 """
-import json, os
+import vision, json, os
 import aggregator as a, analysis, backtester as bt, config, news, scanner, store
 
 import llm
@@ -88,6 +88,7 @@ TOOLS = {
     "run_backtest": lambda g, **k: _backtest(k),
     "scan_pattern": lambda g, **k: scanner.scan_pattern(k["points"], k.get("tfs", ["15m"]), k.get("min", 70))[:5],
     "suggest_drawings": lambda g, **k: {"_draw": k.get("draw", [])},
+    "vision_study": lambda g, **k: vision.pump_study(_sym(k), str(k.get("day", ""))),
     "save_script": lambda g, **k: {"saved_id": __import__("screener").save_script({"name": k.get("name"), "code": k.get("code"), "tf": k.get("tf", "15m"), "on": False}), "note": "saved OFF; the user turns it ON in the Scripts tab"},
 }
 
@@ -105,6 +106,8 @@ CHAT_SYS = (
     "1. Every price, level, percentage or number in your answer must come from a tool result in THIS conversation. Never use memory / training knowledge for prices, news or levels.\n"
     "2. For any coin question call get_levels(sym, tf) first (add get_bundle / get_derivs / get_book / get_news only if needed). Keep calls few.\n"
     "3. If a tool returns empty, an error, or something is missing, say 'data not available' for that part. Do not fill gaps.\n"
+    "3b. EXCEPTION for coins outside the watchlist: order-flow parts (delta, liquidation zones, GEX, order book) may be missing, but candles exist. Then call get_bundle(sym,tf) and derive levels from the candles yourself (recent swing highs and lows, round numbers, high-volume candles, simple trend) and label them 'candle-based'. Never refuse the whole question because order-flow is missing. For 'pick the best N coins' questions: scan_coins first, then get_bundle on the top few, rank by volume spike, range and trend, and say why.\n"
+    "3c. For 'what happened before this pump' questions call vision_study(sym, day) (day = YYYY-MM-DD, a past UTC day) and explain only what it returns.\n"
     "4. Liquidation zones and GEX are model ESTIMATES. Use the word 'confirmed' ONLY when a zone's status is 'confirmed' (price traded through it and aggressive flow / real liquidation prints followed). A reversal zone 'score' is how many independent sources agree, not a probability.\n"
     "5. A green candle with hidden_selling_on_green = true means sellers dominated inside a rising candle (bearish warning); hidden_buying_on_red the opposite.\n"
     "6. Give conditional setups from the data: where price must react, what would confirm it, where it is wrong (invalidation). Entry / stop / target must be levels that appear in the tool data. No guarantees, not financial advice.\n"
@@ -113,14 +116,14 @@ CHAT_SYS = (
     'Reply with JSON ONLY: either {"tool":"name","args":{}} or {"answer":"text","draw":[{"type":"line|box","t1":ms,"p1":price,"t2":ms,"p2":price}]}.\n'
     "Use ALL data types in get_levels: GEX walls, liquidation zones, volume POC/VAH/VAL, sweeps, whales, hidden buying/selling, order-book imbalance, funding/OI, last-24h high/low/VWAP, reversal zones.\n"
     "Tools: scan_coins(syms,tf), get_levels(sym,tf), get_bundle(sym,tf), get_liq(sym), get_gex(ccy), get_book(sym), get_derivs(sym), get_tiers(), get_news(), get_calendar(), "
-    "run_backtest(strategy,sym,tf,n,lev,sl,tp), scan_pattern(points), save_script(name,code,tf).\n"
+    "run_backtest(strategy,sym,tf,n,lev,sl,tp), scan_pattern(points), vision_study(sym,day), save_script(name,code,tf).\n"
     "9. save_script: when the user asks for an alert/screener rule, write Python defining signals(c, f) (returns a list: 1 long, -1 short, 0 none, one per candle; c[i] has t,o,h,l,c,v,delta,bp,cvd; f has delta,bp,cvd,body,upper,lower; helpers sma ema highest lowest atr math; no imports) and save it. It is saved OFF and fires Telegram alerts on Tier 1/2 coins once the user turns it ON.")
 
 
 def _loop(system, msg, key, ag=None, depth=0):
     """The tool loop shared by agents and the chat. ag = agent dict (canvas agents) or None (chat)."""
     draws, trace = [], []
-    for _ in range(6):
+    for _ in range(5):
         raw = gemini(key, system, msg, json_mode=True).strip().strip("`").removeprefix("json").strip()
         try:
             r = json.loads(raw)
@@ -129,7 +132,7 @@ def _loop(system, msg, key, ag=None, depth=0):
         if not isinstance(r, dict):
             return {"answer": raw[:1500], "draw": draws, "trace": trace}
         if "answer" in r:
-            return {"answer": str(r["answer"])[:2500], "draw": (r.get("draw") or []) + draws, "trace": trace}
+            return {"answer": str(r["answer"])[ :2500], "draw": (r.get("draw") or []) + draws, "trace": trace}
         name, args = r.get("tool"), r.get("args") or {}
         try:
             if ag and name == "ask_agent":
@@ -178,4 +181,3 @@ def chat(sym, text, history=None, tf="15m"):
         sym = ", ".join(_sym({"sym": x}) for x in sym[:40]) if sym else "BTCUSDT"
     msg = f"Selected coin(s): {sym}. Chart timeframe: {tf}.\n" + (f"Conversation so far:\n{hist}\n" if hist else "") + "USER QUESTION: " + str(text)[:2000]
     return _loop(CHAT_SYS, msg, ks)
-  
