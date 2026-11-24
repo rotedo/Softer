@@ -1,7 +1,7 @@
 """The only entry point web.py calls:  handle(method, path, headers, body, client_ip) -> (status, content_type, bytes, extra_headers)"""
 import json, os, subprocess
 from urllib.parse import urlparse, parse_qs
-import aggregator as a, agents, analysis, archive, auth, backtester, jobs, news, scanner, screener, store
+import os, re, sys, threading, config, vision, aggregator as a, agents, analysis, archive, auth, backtester, jobs, news, scanner, screener, store
 
 HEALTH = lambda: {}  # web.py replaces this with its snapshot()
 J = "application/json"
@@ -167,6 +167,24 @@ def handle(method, path, headers, body, client_ip="?"):
         if p == "/api/suggestions/refresh" and method == "POST":
             jobs.refresh()
             return _r(200, jobs.CACHE.get("suggestions", []))
+        if p == "/api/watchlist":
+            if method == "POST":
+                base = config.base_watchlist()
+                coins = []
+                for x in data.get("coins") or []:
+                    x = re.sub(r"[^A-Z0-9]", "", str(x).upper().replace("USDT", ""))[:12]
+                    if len(x) >= 2 and x not in base and x not in coins:
+                        coins.append(x)
+                if len(base) + len(coins) > config.MAX_WATCH:
+                    return _r(400, {"error": f"at most {config.MAX_WATCH} coins in the watchlist"})
+                store.kv_set("watchlist", coins)
+                threading.Timer(2.0, lambda: os.execv(sys.executable, [sys.executable] + sys.argv)).start()  # collector reads the list at start
+                return _r(200, {"ok": True, "restart": True})
+            return _r(200, {"coins": config.watchlist(), "fixed": config.base_watchlist(), "max": config.MAX_WATCH})
+        if p == "/api/vision":
+            sym = str(qs.get("sym", ["BTCUSDT"])[0]).upper()
+            sym = sym if sym.endswith("USDT") else sym + "USDT"
+            return _r(200, vision.pump_study(sym, qs.get("day", [""])[0]))
         if p == "/api/backtest" and method == "POST":
             keep = ("strategy", "params", "sym", "tf", "n", "cap", "lev", "sl", "tp", "fee", "code")
             return _r(200, backtester.run(**{k: v for k, v in data.items() if k in keep}))
@@ -214,4 +232,3 @@ def handle(method, path, headers, body, client_ip="?"):
         return _r(400, {"error": str(e)})
     except Exception as e:  # never leak a traceback
         return _r(500, {"error": f"{type(e).__name__}: {e}"[:200]})
-              
