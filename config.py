@@ -29,11 +29,30 @@ def get(name, default=""):
     return os.environ.get(name, default)
 
 
-def watchlist():
-    """WATCHLIST from this file plus env WISHLIST (comma separated), upper-case, no duplicates, order kept"""
+MAX_WATCH = 10  # the collector watches at most this many coins in full detail
+
+
+def base_watchlist():
+    """coins fixed in this file / env (cannot be removed from the app)"""
     out = []
     for b in list(WATCHLIST) + [x for x in os.environ.get("WISHLIST", "").split(",")]:
         b = str(b).strip().upper().replace("USDT", "")
         if b and b not in out:
             out.append(b)
-    return out or ["BTC", "ETH"]
+    return out
+
+
+def watchlist():
+    """WATCHLIST from this file + env WISHLIST + coins added in the app (Settings > Watchlist); upper-case, no duplicates, at most MAX_WATCH"""
+    extra = []
+    try:
+        import store
+        extra = store.kv_get("watchlist", []) or []
+    except Exception:
+        pass
+    out = []
+    for b in list(WATCHLIST) + [x for x in os.environ.get("WISHLIST", "").split(",")] + list(extra):
+        b = str(b).strip().upper().replace("USDT", "")
+        if b and b not in out:
+            out.append(b)
+    return (out or ["BTC", "ETH"])[:MAX_WATCH]
