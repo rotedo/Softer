@@ -32,14 +32,14 @@ table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px 4px;t
 <div id="top"><div id="tabs"></div></div>
 <main id="m"></main>
 <script>
-const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>\"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;'}[c]));
 const TABS=[['home','Dashboard'],['ai','AI'],['scripts','Scripts'],['settings','Settings']];
 let TAB='home', HIST=[], TIMER=null, EDIT=null;
 async function api(p,o={}){const r=await fetch(p,Object.assign({credentials:'same-origin',headers:{}},o));
   if(r.status===401){login();throw new Error('login required')}
   const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('error '+r.status));return j}
 const post=(p,b)=>api(p,{method:'POST',body:JSON.stringify(b||{})});
-const age=s=>s==null?'-':s<90?Math.round(s)+'s':s<5400?Math.round(s/60)+'m':s<172800?Math.round(s/3600)+'h':Math.round(s/86400)+'d';
+const age=s=>s==null?' - ':s<90?Math.round(s)+'s':s<5400?Math.round(s/60)+'m':s<172800?Math.round(s/3600)+'h':Math.round(s/86400)+'d';
 const tm=ms=>new Date(ms).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
 
 function login(msg){if($('#lg'))return;const d=document.createElement('div');d.id='lg';
@@ -60,7 +60,7 @@ async function home(){
   $('#hd').innerHTML=`<div class="card"><div class="row"><div class="grow"><h3>Coins</h3><b style="font-size:22px">${t1+t2}</b> <small>Tier 1: ${t1} \u00b7 Tier 2: ${t2}</small></div>
    <div class="grow"><h3>Scripts ON</h3><b style="font-size:22px">${d.scripts_on}</b></div>
    <div class="grow"><h3>AI keys</h3><b style="font-size:22px" class="${d.ai_keys?'up':'dn'}">${d.ai_keys}</b></div></div>
-   <small>Last screener run: ${d.last.run?tm(d.last.run)+' \u00b7 '+d.last.checked+' checks':'not yet'}</small>${d.last.error?'<div class="wr"><small>'+esc(d.last.error)+'</small></div>':''}</div>
+   <small>Last screener run: ${d.last.run?tm(d.last.run)+' \u00b7 '+d.last.checked+' checks':'not yet'}</small>${d.last.error?' <div class="wr"><small>'+esc(d.last.error)+'</small></div>':''}</div>
    <div class="card"><h3>Latest alerts</h3>${d.alerts.length?d.alerts.map(a=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="${a.side=='long'?'up':'dn'}"><b>${a.side.toUpperCase()}</b></span><b>${esc(a.sym)}</b><small class="grow">${esc(a.script)} \u00b7 ${a.tf} \u00b7 ${a.price}</small><small>${tm(a.ts)}${a.sent?'':' \u26a0'}</small></div>`).join(''):'<small>No alert yet. Turn a script ON in Scripts.</small>'}</div>
    <div class="card"><h3>Tier coins</h3>${d.tiers.length?d.tiers.map(x=>`<span class="pill t${x.tier}" style="margin:2px">${esc(x.sym.replace('USDT',''))} T${x.tier}</span>`).join(''):'<small>No coin has passed the liquidity filter yet (wait for the first scan).</small>'}</div>`
  }catch(e){$('#hd').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}};
@@ -68,16 +68,16 @@ async function home(){
 
 /* ---------------- AI ---------------- */
 function ai(){
- $('#m').innerHTML='<div class="card"><div id="chat"><small>Ask anything about your coins. The AI uses only your collected data. You can also say: "make an alert script for ... " and it will save a script (OFF) for you.</small></div></div><div class="card"><input id="cs" placeholder="Coins (optional): BTC, SOL ... empty = all Tier coins"><div class="row"><input id="ci" class="grow" placeholder="Message\u2026" autocomplete="off"><button class="b" id="mic" title="Voice">\ud83c\udfa4</button><button class="b p" id="cb">Send</button></div><label class="row"><input type="checkbox" id="web" style="width:auto"><small>Web search (Google, works with any AI; needs one Gemini key)</small></label></div>';
+ $('#m').innerHTML='<div class="card"><div id="chat"><small>Ask anything about your coins. The AI uses only your collected data. You can also say: "make an alert script for ... " and it will save a script (OFF) for you.</small></div></div><div class="card"><input id="cs" placeholder="Coins (optional): BTC, SOL ... empty = all Tier coins"><div class="row"><textarea id="ci" class="grow" rows="1" placeholder="Message\u2026" autocomplete="off" style="min-height:44px;max-height:220px;resize:none;overflow-y:auto"></textarea><button class="b" id="mic" title="Voice">\ud83c\udfa4</button><button class="b p" id="cb">Send</button></div><label class="row"><input type="checkbox" id="web" style="width:auto"><small>Web search (Google, works with any AI; needs one Gemini key)</small></label></div>';
  const paint=()=>{$('#chat').innerHTML=HIST.length?HIST.map(h=>`<div class="msg ${h.role=='user'?'me':'ai'}">${esc(h.text)}</div>`).join(''):'<small>Ask anything about your coins.</small>';window.scrollTo(0,document.body.scrollHeight)};
  paint();
- const send=async()=>{const text=$('#ci').value.trim();if(!text)return;$('#ci').value='';HIST.push({role:'user',text});paint();
+ const send=async()=>{const text=$('#ci').value.trim();if(!text)return;$('#ci').value='';$('#ci').style.height='auto';HIST.push({role:'user',text});paint();
   const raw=$('#cs').value.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);let syms=raw;
   if(!syms.length){try{syms=(await api('/api/dashboard')).tiers.map(t=>t.sym)}catch(e){}}
   HIST.push({role:'ai',text:'\u2026'});paint();
   try{const r=await post('/api/chat',{syms:syms.length?syms:['BTCUSDT'],text,history:HIST.slice(-8,-2),web:$('#web').checked});HIST[HIST.length-1].text=r.answer}
   catch(e){HIST[HIST.length-1].text='Error: '+e.message}paint()};
- $('#cb').onclick=send;$('#ci').onkeydown=e=>{if(e.key=='Enter')send()};
+ $('#cb').onclick=send;$('#ci').oninput=()=>{const t=$('#ci');t.style.height='auto';t.style.height=Math.min(t.scrollHeight,220)+'px'};
  let rec=null,chunks=[],stopT=null;
  $('#mic').onclick=async()=>{
   if(rec){rec.stop();return}
@@ -115,17 +115,18 @@ async function scripts(){
   $('#run').onclick=async()=>{$('#rm').textContent='Running\u2026';try{const r=await post('/api/screener/run');$('#rm').textContent=r.new.length+' new alert(s)';scripts()}catch(e){$('#rm').textContent=e.message}};
  }catch(e){$('#m').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}}
 function editor(s){
- $('#m').innerHTML=`<div class="card"><input id="sn" value="${esc(s.name)}" placeholder="Name"><div class="row"><select id="st" style="width:110px">${['5m','15m','1H','4H'].map(t=>`<option ${t==s.tf?'selected':''}>${t}</option>`).join('')}</select><input id="sy" value="BTCUSDT" style="width:130px"><button class="b" id="ts">Test</button></div><textarea id="sc" spellcheck="false" autocapitalize="off">${esc(s.code)}</textarea><div id="se" class="dim"></div><div class="row"><button class="b p" id="sv">Save</button><button class="b" id="cx">Back</button>${s.id?'<button class="b d" id="dl">Delete</button>':''}</div></div>`;
+ $('#m').innerHTML=`<div class="card"><input id="sn" value="${esc(s.name)}" placeholder="Name"><div class="row"><select id="st" style="width:110px">${['5m','15m','1H','4H'].map(t=>`<option ${t==s.tf?'selected':''}>${t}</option>`).join('')}</select><input id="sy" value="BTCUSDT" style="width:130px"><button class="b" id="ts">Test</button><button class="b" id="bk">Backtest</button></div><textarea id="sc" spellcheck="false" autocapitalize="off">${esc(s.code)}</textarea><div id="se" class="dim"></div><div class="row"><button class="b p" id="sv">Save</button><button class="b" id="cx">Back</button>${s.id?' <button class="b d" id="dl">Delete</button>':''}</div></div>`;
  const body=()=>({id:s.id||undefined,name:$('#sn').value,tf:$('#st').value,code:$('#sc').value,on:s.on});
  $('#ts').onclick=async()=>{$('#se').textContent='Testing\u2026';try{const r=await post('/api/scripts/test',{code:$('#sc').value,sym:$('#sy').value.toUpperCase(),tf:$('#st').value});$('#se').innerHTML='<span class="ok">Works.</span> '+r.signals+' signal(s) in last '+r.candles+' candles. '+(r.last.length?'Last: '+r.last.map(x=>x.side+' @'+x.price).join(', '):'')}catch(e){$('#se').innerHTML='<span class="bad">'+esc(e.message)+'</span>'}};
+ $('#bk').onclick=async()=>{$('#se').textContent='Backtesting\u2026';try{const r=await post('/api/backtest',{code:$('#sc').value,sym:$('#sy').value.toUpperCase(),tf:$('#st').value,n:500});$('#se').innerHTML='<span class="ok">Backtest</span><br>'+Object.entries(r.stats||{}).map(([k,v])=>'<small>'+esc(k)+': <b>'+esc(typeof v=='number'?+v.toFixed(2):JSON.stringify(v))+'</b></small>').join(' \u00b7 ')+(r.explain?' <br><small>'+esc(String(r.explain).slice(0,400))+'</small>':'')}catch(e){$('#se').innerHTML='<span class="bad">'+esc(e.message)+'</span>'}};
  $('#sv').onclick=async()=>{try{await post('/api/scripts',body());EDIT=null;scripts()}catch(e){$('#se').innerHTML='<span class="bad">'+esc(e.message)+'</span>'}};
  $('#cx').onclick=()=>{EDIT=null;scripts()};
  if($('#dl'))$('#dl').onclick=async()=>{if(confirm('Delete this script?')){await api('/api/scripts?id='+s.id,{method:'DELETE'});EDIT=null;scripts()}}}
 
 /* ---------------- Settings ---------------- */
 async function settings(){
- $('#m').innerHTML='<div id="s-ai"></div><div id="s-tg"></div><div id="s-pw"></div><div id="s-h"></div>';
- aiKeys();tg();pw();health();TIMER=setInterval(health,5000)}
+ $('#m').innerHTML='<div id="s-ai"></div><div id="s-wl"></div><div id="s-tg"></div><div id="s-pw"></div><div id="s-h"></div>';
+ aiKeys();wl();tg();pw();health();TIMER=setInterval(health,5000)}
 const note=(id,t,ok)=>{const e=$('#'+id);if(e){e.className=ok?'ok':'bad';e.textContent=t}};
 async function aiKeys(){
  try{const d=await api('/api/keys');
@@ -139,13 +140,20 @@ async function aiKeys(){
   document.querySelectorAll('[data-kd]').forEach(b=>b.onclick=async()=>{if(confirm('Delete this key?')){await api('/api/keys?id='+b.dataset.kd,{method:'DELETE'});aiKeys()}});
   $('#ks').onclick=async()=>{try{await post('/api/keys',{name:$('#kn').value,key:$('#kk').value,model:$('#km').value,provider:$('#kp').value,base:$('#kb').value,role:$('#kr').value});aiKeys()}catch(e){note('kx',e.message,0)}};
  }catch(e){$('#s-ai').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}}
+async function wl(){
+ try{const d=await api('/api/watchlist');let mine=d.coins.filter(c=>!d.fixed.includes(c));
+  const draw=()=>{$('#s-wl').innerHTML=`<div class="card"><h3>Watchlist (max ${d.max})</h3><small>Full data (order flow, liquidations) is collected only for these coins. Fixed: ${d.fixed.map(esc).join(', ')}. Saving restarts the server for a few seconds.</small><div style="margin:8px 0">${mine.map((c,i)=>`<span class="pill">${esc(c)} <a data-rm="${i}" style="cursor:pointer">\u2715</a></span> `).join('')||'<small>No extra coins yet.</small>'}</div><div class="row"><input id="wc" class="grow" placeholder="Coin, e.g. PEPE" autocapitalize="characters"><button class="b" id="wa">Add</button><button class="b p" id="ws">Save</button></div><div id="wx"></div></div>`;
+   document.querySelectorAll('[data-rm]').forEach(a=>a.onclick=()=>{mine.splice(+a.dataset.rm,1);draw()});
+   $('#wa').onclick=()=>{const v=$('#wc').value.toUpperCase().replace(/[^A-Z0-9]/g,'').replace('USDT','');if(!v)return;if(d.fixed.length+mine.length>=d.max){note('wx','Limit reached ('+d.max+')',0);return}if(!mine.includes(v)&&!d.fixed.includes(v))mine.push(v);draw()};
+   $('#ws').onclick=async()=>{try{await post('/api/watchlist',{coins:mine});note('wx','Saved. Server is restarting, reload in 10 seconds.',1)}catch(e){note('wx',e.message,0)}}};
+  draw()}catch(e){$('#s-wl').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}}
 async function tg(){
  try{const t=await api('/api/telegram');
   $('#s-tg').innerHTML=`<div class="card"><h3>Telegram</h3><small>Screener alerts and weekly archives come to this chat.</small><input id="tt" placeholder="${t.has_token?'Bot token saved '+esc(t.masked)+' (paste to replace)':'Bot token from @BotFather'}" autocomplete="off" autocapitalize="off" spellcheck="false"><input id="tc" placeholder="Chat ID, e.g. 123456789" value="${esc(t.chat_id||'')}" inputmode="numeric"><div class="row"><button class="b p" id="tsv">Save</button><button class="b" id="tts">Send test</button><span id="tx"></span></div></div>`;
   $('#tsv').onclick=async()=>{try{await post('/api/telegram',{token:$('#tt').value,chat_id:$('#tc').value});note('tx','Saved',1);tg()}catch(e){note('tx',e.message,0)}};
   $('#tts').onclick=async()=>{try{const r=await post('/api/telegram/test');note('tx',r.ok?'Message sent':r.error,r.ok)}catch(e){note('tx',e.message,0)}};
  }catch(e){$('#s-tg').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}}
-function pw(){$('#s-pw').innerHTML='<div class="card"><h3>Password</h3><input id="pc" type="password" placeholder="Current password"><input id="pn" type="password" placeholder="New password (10+ characters)"><button class="b p" id="pv">Change</button> <span id="px"></span></div>';
+function pw(){ $('#s-pw').innerHTML='<div class="card"><h3>Password</h3><input id="pc" type="password" placeholder="Current password"><input id="pn" type="password" placeholder="New password (10+ characters)"><button class="b p" id="pv">Change</button> <span id="px"></span></div>';
  $('#pv').onclick=async()=>{try{await post('/api/admin/password',{current:$('#pc').value,password:$('#pn').value});note('px','Changed',1)}catch(e){note('px',e.message,0)}}}
 async function health(){
  try{const h=await api('/api/health');
