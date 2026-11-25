@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Screener</title>
+<link rel="manifest" href="/manifest.webmanifest"><meta name="theme-color" content="#0c0f24"><link rel="apple-touch-icon" href="/icon-192.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+:root{--bg:#0a0d12;--card:#121826;--line:#232d40;--tx:#e8f0ff;--dim:#8f9bb3;--ac:#3d8bff;--up:#2ecc8f;--dn:#ff4d5e;--warn:#f5b042}
+*{box-sizing:border-box}html,body{margin:0;background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+body{padding-bottom:env(safe-area-inset-bottom)}
+#top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:env(safe-area-inset-top) 8px 0}
+#tabs{display:flex;gap:4px;overflow-x:auto}
+#tabs button{flex:1;min-width:80px;background:none;border:0;color:var(--dim);padding:13px 6px;font-size:15px;font-weight:600;border-bottom:3px solid transparent}
+#tabs button.on{color:var(--tx);border-color:var(--ac)}
+main{padding:12px;max-width:820px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:12px}
+h2{margin:0 0 4px;font-size:22px}h3{margin:0 0 10px;font-size:13px;letter-spacing:.08em;color:var(--dim);text-transform:uppercase}
+small,.dim{color:var(--dim);font-size:13px}
+input,select,textarea{width:100%;background:#0d1320;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:11px;font-size:15px;margin:4px 0;font-family:inherit}
+textarea{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;min-height:220px;white-space:pre;overflow:auto}
+button.b{background:#1a2338;color:var(--tx);border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-size:14px;font-weight:600}
+button.p{background:var(--ac);border-color:var(--ac);color:#fff}button.d{color:var(--dn)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.grow{flex:1;min-width:0}
+.pill{display:inline-block;padding:2px 9px;border-radius:99px;font-size:12px;font-weight:700;background:#1a2338;color:var(--dim)}
+.t1{background:#16314f;color:#7cb8ff}.t2{background:#3a2a10;color:var(--warn)}
+.up{color:var(--up)}.dn{color:var(--dn)}.wr{color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{padding:6px 4px;text-align:left;border-bottom:1px solid var(--line)}th{color:var(--dim);font-weight:600}
+.msg{margin:6px 0;padding:10px 12px;border-radius:12px;max-width:92%;white-space:pre-wrap;word-wrap:break-word}
+.me{background:#1b3a66;margin-left:auto}.ai{background:#161e30;border:1px solid var(--line)}
+#chat{min-height:46vh}
+.ok{color:var(--up)}.bad{color:var(--dn)}
+#lg{position:fixed;inset:0;z-index:99;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:24px}
+
+/* ===== Aurora look (all pages) ===== */
+html,body{background:radial-gradient(620px 440px at 8% -4%,#5b3df5 0%,transparent 60%),radial-gradient(540px 440px at 100% 22%,#00b5d8 0%,transparent 55%),radial-gradient(520px 420px at 0% 96%,#e6399b 0%,transparent 55%),#0c0f24;background-attachment:fixed;color:#f3f4ff}
+:root{--bg:#0c0f24;--card:rgba(255,255,255,.09);--line:rgba(255,255,255,.16);--tx:#f3f4ff;--dim:#aab0d8;--ac:#7c9bff;--up:#4de3a8;--dn:#ff7d8f;--warn:#ffc46b}
+main{padding-bottom:120px}
+.card{backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:20px;box-shadow:0 6px 24px rgba(0,0,0,.25)}
+input,select,textarea{background:rgba(255,255,255,.08)!important;border-color:rgba(255,255,255,.16)!important;color:var(--tx)!important}
+textarea{white-space:pre-wrap;word-wrap:break-word;font-family:inherit;font-size:15px}
+#sc{white-space:pre!important;font-family:ui-monospace,Menlo,Consolas,monospace!important;font-size:13px!important}
+button.b{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.18)}
+button.p{background:linear-gradient(135deg,#7c9bff,#c26bff);border:0;color:#fff}
+.pill{background:rgba(255,255,255,.12)}.t1{background:rgba(124,155,255,.28);color:#d3e0ff}.t2{background:rgba(255,196,107,.24);color:#ffdca3}
+#top{position:fixed;top:auto;bottom:0;left:0;right:0;border:0;border-top:1px solid var(--line);background:rgba(10,12,34,.62);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:6px 8px calc(8px + env(safe-area-inset-bottom));z-index:30}
+#tabs{justify-content:space-around}
+#tabs button{flex:1;min-width:0;padding:6px 2px;font-size:12px;font-weight:500;border:0;display:flex;flex-direction:column;align-items:center;gap:1px;color:var(--dim)}
+#tabs button .ic{font-size:20px;line-height:1.1}
+#tabs button.on{color:#a9bfff}
+/* ===== AI screen ===== */
+#chat{min-height:30vh;padding:4px 2px}
+.u{margin:14px 0 14px auto;max-width:84%;background:rgba(255,255,255,.14);backdrop-filter:blur(14px);padding:10px 14px;border-radius:20px 20px 6px 20px;width:fit-content;white-space:pre-wrap;word-wrap:break-word}
+.a{margin:14px 0}.a .who{color:#c9d4ff;font-size:18px;margin-bottom:2px}.a p{margin:6px 0}.a ul{margin:6px 0;padding-left:20px}.a li{margin:3px 0}.a code{background:rgba(255,255,255,.12);padding:1px 6px;border-radius:6px}
+.used{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.used i{font-style:normal;font-size:12.5px;color:var(--dim);background:rgba(255,255,255,.1);padding:3px 10px;border-radius:99px}
+.think{color:var(--dim);display:flex;gap:5px;align-items:center;margin:10px 0}.think s{width:7px;height:7px;border-radius:50%;background:#9db6ff;display:inline-block;opacity:.4;animation:bl 1.2s infinite}.think s:nth-child(2){animation-delay:.2s}.think s:nth-child(3){animation-delay:.4s}
+@keyframes bl{0%,100%{opacity:.25}50%{opacity:1}}
+#cmp{position:fixed;left:0;right:0;bottom:calc(66px + env(safe-area-inset-bottom));z-index:25;padding:8px 12px}
+#cmi{max-width:820px;margin:0 auto}
+#csr{margin-bottom:6px}
+#bx{background:rgba(255,255,255,.1);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,.2);border-radius:28px;padding:10px 10px 8px 18px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+#bx textarea{width:100%;border:0!important;background:transparent!important;margin:0;padding:6px 0;min-height:44px;max-height:190px;resize:none;overflow-y:auto;font-size:16.5px;outline:none}
+#bx .r{display:flex;align-items:center;gap:8px;margin-top:4px}
+#bx .chip{font-size:13.5px;color:var(--dim);border:1px solid rgba(255,255,255,.2);border-radius:99px;padding:6px 13px}
+#bx .sp{flex:1}
+.rb{width:46px;height:46px;border-radius:50%;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:20px;flex:none}
+.rb.sd{background:linear-gradient(135deg,#7c9bff,#c26bff);font-size:22px}
+</style></head><body>
+<div id="top"><div id="tabs"></div></div>
+<main id="m"></main>
+<script>
+const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const TABS=[['home','<span class="ic">\u2302</span>Dashboard'],['ai','<span class="ic">\u2726</span>AI'],['scripts','<span class="ic">\u2261</span>Scripts'],['settings','<span class="ic">\u2699</span>Settings']];
+let TAB='home', HIST=[], TIMER=null, EDIT=null;
+async function api(p,o={}){const r=await fetch(p,Object.assign({credentials:'same-origin',headers:{}},o));
+  if(r.status===401){login();throw new Error('login required')}
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('error '+r.status));return j}
+const post=(p,b)=>api(p,{method:'POST',body:JSON.stringify(b||{})});
+const age=s=>s==null?'-':s<90?Math.round(s)+'s':s<5400?Math.round(s/60)+'m':s<172800?Math.round(s/3600)+'h':Math.round(s/86400)+'d';
+const tm=ms=>new Date(ms).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+
+function login(msg){if($('#lg'))return;const d=document.createElement('div');d.id='lg';
+ d.innerHTML='<div style="width:100%;max-width:320px"><h2>Screener</h2><div class="dim" id="lgm">Enter admin password</div><input id="lgp" type="password" placeholder="Password"><button class="b p" id="lgb" style="width:100%;margin-top:8px;padding:13px">Login</button></div>';
+ document.body.appendChild(d);
+ const go=async()=>{try{await post('/api/login',{password:$('#lgp').value});d.remove();show(TAB)}catch(e){$('#lgm').textContent=e.message}};
+ $('#lgb').onclick=go;$('#lgp').onkeydown=e=>{if(e.key=='Enter')go()}}
+
+function tabs(){$('#tabs').innerHTML=TABS.map(t=>`<button class="${t[0]==TAB?'on':''}" data-t="${t[0]}">${t[1]}</button>`).join('');
+ document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>show(b.dataset.t))}
+function show(t){TAB=t;clearInterval(TIMER);tabs();({home,ai,scripts,settings})[t]()}
+
+/* ---------------- Dashboard ---------------- */
+async function home(){
+ $('#m').innerHTML='<div class="card"><h2>Welcome \u{1F44B}</h2><small>Screener is watching your liquid coins (Tier 1).</small></div><div id="hd"></div>';
+ const draw=async()=>{try{const d=await api('/api/dashboard');
+  const t1=d.tiers.filter(x=>x.tier==1).length,t2=d.tiers.filter(x=>x.tier==2).length;
+  $('#hd').innerHTML=`<div class="card"><div class="row"><div class="grow"><h3>Coins</h3><b style="font-size:22px">${t1+t2}</b> <small>Tier 1: ${t1} \u00b7 Tier 2: ${t2}</small></div>
+   <div class="grow"><h3>Scripts ON</h3><b style="font-size:22px">${d.scripts_on}</b></div>
+   <div class="grow"><h3>AI keys</h3><b style="font-size:22px" class="${d.ai_keys?'up':'dn'}">${d.ai_keys}</b></div></div>
+   <small>Last screener run: ${d.last.run?tm(d.last.run)+' \u00b7 '+d.last.checked+' checks':'not yet'}</small>${d.last.error?'<div class="wr"><small>'+esc(d.last.error)+'</small></div>':''}</div>
+   <div class="card"><h3>Latest alerts</h3>${d.alerts.length?d.alerts.map(a=>`<div class="row" style="padding:6px 0;border-bottom:1px solid var(--line)"><span class="${a.side=='long'?'up':'dn'}"><b>${a.side.toUpperCase()}</b></span><b>${esc(a.sym)}</b><small class="grow">${esc(a.script)} \u00b7 ${a.tf} \u00b7 ${a.price}</small><small>${tm(a.ts)}${a.sent?'':' \u26a0'}</small></div>`).join(''):'<small>No alert yet. Turn a script ON in Scripts.</small>'}</div>
+   <div class="card"><h3>Tier coins</h3>${d.tiers.length?d.tiers.map(x=>`<span class="pill t${x.tier}" style="margin:2px">${esc(x.sym.replace('USDT',''))} T${x.tier}</span>`).join(''):'<small>No coin has passed the liquidity filter yet (wait for the first scan).</small>'}</div>`
+ }catch(e){$('#hd').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}};
+ draw();TIMER=setInterval(draw,15000)}
+
+/* ---------------- AI ---------------- */
+function ai(){
+ $('#m').innerHTML='<div id="chat"></div><div style="height:240px"></div><div id="cmp"><div id="cmi"><div id="csr" style="display:none"><input id="cs" placeholder="Coins: BTC, SOL ... (empty = all Tier coins)" autocapitalize="characters" autocomplete="off"></div><div id="bx"><textarea id="ci" rows="1" placeholder="Ask about any coin\u2026" autocomplete="off"></textarea><div class="r"><span class="chip" id="cc">\uff0b Coins</span><span class="sp"></span><button class="rb" id="mic" title="Voice">\ud83c\udfa4</button><button class="rb sd" id="cb" title="Send">\u2191</button></div></div></div></div>';
+ const md=s=>{let t=esc(String(s||'').replace(/\s*\[[a-z_]+(?:\([^\]]*\))?\]/g,''));
+  t=t.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/`([^`]+)`/g,'<code>$1</code>');
+  let o='',ul=false;
+  for(const l of t.split('\n')){const q=l.match(/^\s*(?:[-*\u2022]|\d+[.)])\s+(.*)$/);
+   if(q){if(!ul){o+='<ul>';ul=true}o+='<li>'+q[1]+'</li>'}else{if(ul){o+='</ul>';ul=false}if(l.trim())o+='<p>'+l+'</p>'}}
+  return o+(ul?'</ul>':'')};
+ const paint=()=>{$('#chat').innerHTML=HIST.length?HIST.map(h=>h.role=='user'?`<div class="u">${esc(h.text)}</div>`:`<div class="a"><div class="who">\u2726</div>${h.text=='\u2026'?'<div class="think"><s></s><s></s><s></s>&nbsp;thinking\u2026</div>':md(h.text)}${(h.tools&&h.tools.length)?'<div class="used">'+h.tools.map(t=>'<i>'+esc(t)+'</i>').join('')+'</div>':''}</div>`).join(''):'<div class="a"><div class="who">\u2726</div><p class="dim">Ask anything about your coins. The AI uses your collected data and Google search. You can also say: "make an alert script for ..." and it will save one (OFF) for you.</p></div>';window.scrollTo(0,document.body.scrollHeight)};
+ const fit=()=>{const t=$('#ci');t.style.height='auto';t.style.height=Math.min(t.scrollHeight,190)+'px'};
+ paint();
+ const send=async()=>{const text=$('#ci').value.trim();if(!text)return;$('#ci').value='';fit();HIST.push({role:'user',text});paint();
+  const raw=$('#cs').value.split(',').map(x=>x.trim().toUpperCase()).filter(Boolean);let syms=raw;
+  if(!syms.length){try{syms=(await api('/api/dashboard')).tiers.map(t=>t.sym)}catch(e){}}
+  HIST.push({role:'ai',text:'\u2026'});paint();
+  try{const r=await post('/api/chat',{syms:syms.length?syms:['BTCUSDT'],text,history:HIST.slice(-8,-2)});HIST[HIST.length-1].text=r.answer;HIST[HIST.length-1].tools=[...new Set((r.trace||[]).map(t=>t.tool))]}
+  catch(e){HIST[HIST.length-1].text='Error: '+e.message}paint()};
+ $('#ci').oninput=fit;$('#cb').onclick=send;$('#cc').onclick=()=>{const r=$('#csr');r.style.display=r.style.display=='none'?'block':'none'};
+ let rec=null,chunks=[],stopT=null;
+ $('#mic').onclick=async()=>{
+  if(rec){rec.stop();return}
+  try{const st=await navigator.mediaDevices.getUserMedia({audio:true});
+   const mt=MediaRecorder.isTypeSupported('audio/webm;codecs=opus')?'audio/webm;codecs=opus':'';
+   rec=new MediaRecorder(st,mt?{mimeType:mt}:{});chunks=[];
+   rec.ondataavailable=e=>chunks.push(e.data);
+   rec.onstop=async()=>{clearTimeout(stopT);st.getTracks().forEach(t=>t.stop());$('#mic').textContent='\ud83c\udfa4';
+    const blob=new Blob(chunks,{type:rec.mimeType||'audio/webm'});rec=null;
+    $('#ci').placeholder='Writing\u2026';
+    try{const b64=await new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result.split(',')[1]);r.onerror=no;r.readAsDataURL(blob)});
+     const r=await post('/api/transcribe',{audio:b64,mime:blob.type});$('#ci').value=($('#ci').value+' '+r.text).trim()}
+    catch(e){$('#ci').value='';$('#ci').placeholder=e.message;return}
+    $('#ci').placeholder='Message\u2026'};
+   rec.start();$('#mic').textContent='\u23f9';stopT=setTimeout(()=>rec&&rec.stop(),60000)
+  }catch(e){$('#ci').placeholder='Mic blocked: '+e.message}}}
+/* ---------------- Scripts ---------------- */
+const NEW={id:0,name:'My script',tf:'15m',on:false,code:'# Return 1 (long), -1 (short) or 0 for every candle.\n# c[i] has t,o,h,l,c,v,delta,bp,cvd  |  f has delta,bp,cvd,body,upper,lower  |  helpers: sma ema highest lowest atr math\ndef signals(c, f):\n    out = [0] * len(c)\n    for i in range(1, len(c)):\n        if c[i]["c"] > c[i-1]["h"] and f["delta"][i] > 0:\n            out[i] = 1\n    return out\n'};
+async function scripts(){
+ $('#m').innerHTML='<div class="card">Loading\u2026</div>';
+ try{const d=await api('/api/scripts');
+  if(EDIT){editor(EDIT);return}
+  $('#m').innerHTML=`<div class="card"><h3>Screener</h3><div class="row"><small>Check every</small><input id="ev" type="number" min="1" max="120" value="${d.cfg.every_min}" style="width:80px"><small>min</small><label class="row"><input type="checkbox" id="aic" ${d.cfg.ai?'checked':''} style="width:auto"><small>AI note in alert</small></label><button class="b" id="cfs">Save</button><button class="b p" id="run">Run now</button></div><div class="row" style="margin-top:8px"><label class="row"><input type="checkbox" id="spo" ${d.cfg.spike.on?'checked':''} style="width:auto"><small>Spike alert</small></label><input id="spp" type="number" step="0.5" min="0.5" value="${d.cfg.spike.pct}" style="width:70px"><small>% in</small><input id="spm" type="number" min="1" max="15" value="${d.cfg.spike.mins}" style="width:60px"><small>min</small><label class="row"><input type="checkbox" id="un2" ${d.cfg.universe=='tier2'?'checked':''} style="width:auto"><small>Tier 2 only</small></label></div><div id="rm" class="dim"></div></div>
+  <div class="card"><h3>AI writes a script</h3><textarea id="aip" placeholder="Describe the setup in words (Hindi/English)" style="min-height:70px"></textarea><div class="row"><button class="b p" id="aib">Write script</button><small id="aim" class="dim grow"></small></div></div>
+  ${d.scripts.map(s=>`<div class="card"><div class="row"><div class="grow"><b>${esc(s.name)}</b> <span class="pill">${esc(s.tf)}</span><br><small class="${s.on?'up':''}">${s.on?'ON \u2013 sends Telegram alerts':'OFF'}</small></div><button class="b ${s.on?'':'p'}" data-tg="${s.id}">${s.on?'Turn OFF':'Turn ON'}</button><button class="b" data-ed="${s.id}">Edit</button></div></div>`).join('')}
+  <button class="b p" id="nw" style="width:100%;padding:13px">+ New script</button>
+  <div class="card" style="margin-top:12px"><h3>Alert history</h3>${d.alerts.length?d.alerts.map(a=>`<div class="row" style="padding:5px 0;border-bottom:1px solid var(--line)"><span class="${a.side=='long'?'up':'dn'}"><b>${a.side.toUpperCase()}</b></span><b>${esc(a.sym)}</b><small class="grow">${esc(a.script)} \u00b7 ${a.price}</small><small>${tm(a.ts)}</small></div>`).join(''):'<small>None yet</small>'}</div>`;
+  const byId=id=>d.scripts.find(x=>x.id==id);
+  document.querySelectorAll('[data-tg]').forEach(b=>b.onclick=async()=>{const s=byId(b.dataset.tg);try{await post('/api/scripts',{...s,on:!s.on});scripts()}catch(e){$('#rm').textContent=e.message}});
+  document.querySelectorAll('[data-ed]').forEach(b=>b.onclick=()=>{EDIT=byId(b.dataset.ed);scripts()});
+  $('#nw').onclick=()=>{EDIT={...NEW};scripts()};
+  $('#cfs').onclick=async()=>{await post('/api/screener/cfg',{every_min:+$('#ev').value||5,ai:$('#aic').checked,universe:$('#un2').checked?'tier2':'tier1',spike:{on:$('#spo').checked,pct:+$('#spp').value||3,mins:+$('#spm').value||5,cooldown:10}});$('#rm').textContent='Saved'};
+  $('#aib').onclick=async()=>{$('#aim').textContent='Writing\u2026';try{await post('/api/scripts/ai',{prompt:$('#aip').value});scripts()}catch(e){$('#aim').textContent=e.message}};
+  $('#run').onclick=async()=>{$('#rm').textContent='Running\u2026';try{const r=await post('/api/screener/run');$('#rm').textContent=r.new.length+' new alert(s)';scripts()}catch(e){$('#rm').textContent=e.message}};
+ }catch(e){$('#m').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}}
+function editor(s){
+ $('#m').innerHTML=`<div class="card"><input id="sn" value="${esc(s.name)}" placeholder="Name"><div class="row"><input id="st" value="${esc(s.tf||'15m')}" placeholder="5m, 15m, 1H, 4H, 1D" autocapitalize="off" autocomplete="off" style="width:140px"><input id="sy" value="BTCUSDT" style="width:130px"><input id="su" value="${esc(s.uni||'')}" placeholder="coins: tier1 / tier2 / all" autocapitalize="off" autocomplete="off" style="width:190px"><button class="b" id="ts">Test</button><button class="b" id="bk">Backtest</button></div><textarea id="sc" spellcheck="false" autocapitalize="off">${esc(s.code)}</textarea><div id="se" class="dim"></div><div class="row"><button class="b p" id="sv">Save</button><button class="b" id="cx">Back</button>${s.id?'<button class="b d" id="dl">Delete</button>':''}</div></div>`;
+ const body=()=>({id:s.id||undefined,name:$('#sn').value,tf:$('#st').value.trim(),uni:$('#su').value,code:$('#sc').value,on:s.on});
+ $('#ts').onclick=async()=>{$('#se').textContent='Testing\u2026';try{const r=await post('/api/scripts/test',{code:$('#sc').value,sym:$('#sy').value.toUpperCase(),tf:$('#st').value});$('#se').innerHTML='<span class="ok">Works.</span> '+r.signals+' signal(s) in last '+r.candles+' candles. '+(r.last.length?'Last: '+r.last.map(x=>x.side+' @'+x.price).join(', '):'')}catch(e){$('#se').innerHTML='<span class="bad">'+esc(e.message)+'</span>'}};
+ $('#bk').onclick=async()=>{$('#se').textContent='Backtesting\u2026';try{const r=await post('/api/backtest',{code:$('#sc').value,sym:$('#sy').value.toUpperCase(),tf:$('#st').value,n:500});$('#se').innerHTML='<span class="ok">Backtest</span><br>'+Object.entries(r.stats||{}).map(([k,v])=>'<small>'+esc(k)+': <b>'+esc(typeof v=='number'?+v.toFixed(2):JSON.stringify(v))+'</b></small>').join(' \u00b7 ')+(r.explain?'<br><small>'+esc(String(r.explain).slice(0,400))+'</small>':'')}catch(e){$('#se').innerHTML='<span class="bad">'+esc(e.message)+'</span>'}};
+ $('#sv').onclick=async()=>{try{await post('/api/scripts',body());EDIT=null;scripts()}catch(e){$('#se').innerHTML='<span class="bad">'+esc(e.message)+'</span>'}};
+ $('#cx').onclick=()=>{EDIT=null;scripts()};
+ if($('#dl'))$('#dl').onclick=async()=>{if(confirm('Delete this script?')){await api('/api/scripts?id='+s.id,{method:'DELETE'});EDIT=null;scripts()}}}
+
+/* ---------------- Settings ---------------- */
+async function settings(){
+ $('#m').innerHTML='<div id="s-ai"></div><div id="s-wl"></div><div id="s-https"></div><div id="s-tg"></div><div id="s-pw"></div><div id="s-h"></div>';
+ aiKeys();wl();hs();tg();pw();health();TIMER=setInterval(health,5000)}
+const note=(id,t,ok)=>{const e=$('#'+id);if(e){e.className=ok?'ok':'bad';e.textContent=t}};
+async function aiKeys(){
+ try{const d=await api('/api/keys');
+  $('#s-ai').innerHTML=`<div class="card"><h3>AI keys</h3><small>Paste any key: Gemini, Claude, ChatGPT, OpenRouter, Groq. The provider and a working model are found automatically.</small>
+  ${d.keys.map(k=>`<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)"><div class="grow"><b>${esc(k.name)}</b> <span class="pill">${esc(k.provider||'')}</span> <span class="pill ${k.role=='chat'?'t1':''}">${k.role=='chat'?'main':k.role}</span><br><small>${esc(k.masked)}${k.model?' \u00b7 '+esc(k.model):''}</small><div id="kt${k.id}" class="dim"></div></div><button class="b" data-kt="${k.id}">Test</button><button class="b d" data-kd="${k.id}">Delete</button></div>`).join('')||'<div class="dim" style="margin-top:8px">No key yet.</div>'}
+  <input id="kn" placeholder="Name (e.g. Claude main)"><input id="kw" placeholder="What this AI does (optional), e.g. writes my scripts"><input id="kk" placeholder="API key" autocomplete="off" autocapitalize="off" spellcheck="false"><input id="km" placeholder="Model (optional, leave empty = automatic)">
+  <select id="kp"><option value="">Provider: automatic</option><option value="gemini">Gemini</option><option value="claude">Claude</option><option value="openai">ChatGPT</option><option value="openrouter">OpenRouter</option><option value="groq">Groq</option><option value="deepseek">DeepSeek</option><option value="custom">Other company (OpenAI-compatible API)</option></select><input id="kb" placeholder="Only for Other: base URL, e.g. https://api.example.com/v1">
+  <select id="kr"><option value="chat">Main chat (used first)</option><option value="backup">Backup (used if others fail)</option><option value="scripts">Writes my scripts</option><option value="alerts">Alert notes</option><option value="voice">Voice typing</option><option value="off">Off</option></select>
+  <button class="b p" id="ks">Save key</button> <span id="kx"></span></div>`;
+  document.querySelectorAll('[data-kt]').forEach(b=>b.onclick=async()=>{const o=$('#kt'+b.dataset.kt);o.textContent='Testing\u2026';try{const r=await post('/api/keys/test',{id:+b.dataset.kt});o.className=r.ok?'ok':'bad';o.textContent=r.detail}catch(e){o.className='bad';o.textContent=e.message}});
+  document.querySelectorAll('[data-kd]').forEach(b=>b.onclick=async()=>{if(confirm('Delete this key?')){await api('/api/keys?id='+b.dataset.kd,{method:'DELETE'});aiKeys()}});
+  $('#ks').onclick=async()=>{try{await post('/api/keys',{name:$('#kn').value,key:$('#kk').value,model:$('#km').value,provider:$('#kp').value,base:$('#kb').value,work:$('#kw').value,role:$('#kr').value});aiKeys()}catch(e){note('kx',e.message,0)}};
+ }catch(e){$('#s-ai').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}}
+async function wl(){
+ try{const d=await api('/api/watchlist');let mine=d.coins.filter(c=>!d.fixed.includes(c));
+  const draw=()=>{$('#s-wl').innerHTML=`<div class="card"><h3>Watchlist (max ${d.max})</h3><small>Full data (order flow, liquidations) is collected only for these coins. Fixed: ${d.fixed.map(esc).join(', ')}. Saving restarts the server for a few seconds.</small><div style="margin:8px 0">${mine.map((c,i)=>`<span class="pill">${esc(c)} <a data-rm="${i}" style="cursor:pointer">\u2715</a></span> `).join('')||'<small>No extra coins yet.</small>'}</div><div class="row"><input id="wc" class="grow" placeholder="Coin, e.g. PEPE" autocapitalize="characters"><button class="b" id="wa">Add</button><button class="b p" id="ws">Save</button></div><div id="wx"></div></div>`;
+   document.querySelectorAll('[data-rm]').forEach(a=>a.onclick=()=>{mine.splice(+a.dataset.rm,1);draw()});
+   $('#wa').onclick=()=>{const v=$('#wc').value.toUpperCase().replace(/[^A-Z0-9]/g,'').replace('USDT','');if(!v)return;if(d.fixed.length+mine.length>=d.max){note('wx','Limit reached ('+d.max+')',0);return}if(!mine.includes(v)&&!d.fixed.includes(v))mine.push(v);draw()};
+   $('#ws').onclick=async()=>{try{await post('/api/watchlist',{coins:mine});note('wx','Saved. Server is restarting, reload in 10 seconds.',1)}catch(e){note('wx',e.message,0)}}};
+  draw()}catch(e){$('#s-wl').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}}
+async function hs(){
+ try{const d=await api('/api/https');
+  $('#s-https').innerHTML=`<div class="card"><h3>HTTPS link (free, for the app)</h3><small>1) duckdns.org: sign in, create a name, copy the token. 2) AWS security group: open TCP port ${d.port}. 3) Paste both here and press Start. Then open the link below and use Chrome menu > Install app.</small>
+  <input id="hd1" placeholder="yourname.duckdns.org" value="${esc(d.domain)}" autocapitalize="off" autocomplete="off"><input id="hd2" placeholder="${d.has_token?'Token saved (paste again only to change)':'DuckDNS token'}" autocomplete="off" autocapitalize="off">
+  <div class="row"><button class="b p" id="hgo">Start</button>${d.on?'<button class="b" id="hoff">Stop</button>':''}<button class="b" id="hre">Refresh</button></div>
+  <div id="hx" class="dim">${d.on?(d.running?'<span class="ok">Running</span>':'<span class="bad">Not running yet</span>'):'Off'}${d.url?'<br><a href="'+esc(d.url)+'" style="color:#9db6ff">'+esc(d.url)+'</a>':''}${d.error?'<br><span class="bad">'+esc(d.error)+'</span>':''}${d.on&&!d.root?'<br><small>Not running as root: that is fine, port '+d.port+' needs no root.</small>':''}</div>
+  ${d.log?'<pre style="white-space:pre-wrap;font-size:11px;opacity:.8;max-height:160px;overflow:auto">'+esc(d.log)+'</pre>':''}</div>`;
+  $('#hgo').onclick=async()=>{try{await post('/api/https',{domain:$('#hd1').value,token:$('#hd2').value});note('hx','Starting (first time it downloads Caddy and gets the certificate, 1-2 minutes). Press Refresh.',1)}catch(e){note('hx',e.message,0)}};
+  $('#hre').onclick=hs;if($('#hoff'))$('#hoff').onclick=async()=>{await post('/api/https',{off:1});hs()}
+ }catch(e){$('#s-https').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}}
+async function tg(){
+ try{const t=await api('/api/telegram');
+  $('#s-tg').innerHTML=`<div class="card"><h3>Telegram</h3><small>Screener alerts and weekly archives come to this chat.</small><input id="tt" placeholder="${t.has_token?'Bot token saved '+esc(t.masked)+' (paste to replace)':'Bot token from @BotFather'}" autocomplete="off" autocapitalize="off" spellcheck="false"><input id="tc" placeholder="Chat ID, e.g. 123456789" value="${esc(t.chat_id||'')}" inputmode="numeric"><div class="row"><button class="b p" id="tsv">Save</button><button class="b" id="tts">Send test</button><span id="tx"></span></div></div>`;
+  $('#tsv').onclick=async()=>{try{await post('/api/telegram',{token:$('#tt').value,chat_id:$('#tc').value});note('tx','Saved',1);tg()}catch(e){note('tx',e.message,0)}};
+  $('#tts').onclick=async()=>{try{const r=await post('/api/telegram/test');note('tx',r.ok?'Message sent':r.error,r.ok)}catch(e){note('tx',e.message,0)}};
+ }catch(e){$('#s-tg').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}}
+function pw(){$('#s-pw').innerHTML='<div class="card"><h3>Password</h3><input id="pc" type="password" placeholder="Current password"><input id="pn" type="password" placeholder="New password (10+ characters)"><button class="b p" id="pv">Change</button> <span id="px"></span></div>';
+ $('#pv').onclick=async()=>{try{await post('/api/admin/password',{current:$('#pc').value,password:$('#pn').value});note('px','Changed',1)}catch(e){note('px',e.message,0)}}}
+async function health(){
+ try{const h=await api('/api/health');
+  const feeds=Object.entries(h.feeds||{}).sort(),tb=Object.entries(h.tables||{});
+  const okf=feeds.filter(([k,v])=>v.age_s!=null&&v.age_s<(v.max_age_s||(v.kind=='rest'?400:30))).length;
+  $('#s-h').innerHTML=`<div class="card"><h3>System health</h3><div class="row"><span>Uptime <b>${age(h.uptime_s)}</b></span><span>DB <b>${h.db_mb??'-'} MB</b></span><span>Restarts <b>${h.restarts??'-'}</b></span><span>Feeds OK <b class="${okf==feeds.length?'up':'wr'}">${okf}/${feeds.length}</b></span><span>AI keys <b>${h.ai_keys??0}</b></span></div></div>
+  <div class="card"><h3>Tables (how old is the newest row)</h3><table><tr><th>table<th>rows<th>newest</tr>${tb.map(([k,v])=>`<tr><td>${esc(k)}<td>${v.rows??esc(v)}<td class="${v.age_s==null?'dn':v.age_s>900?'wr':'up'}">${age(v.age_s)}</tr>`).join('')}</table></div>
+  <div class="card"><h3>Data feeds</h3><table><tr><th>feed<th>state<th>age<th>err</tr>${feeds.map(([k,v])=>{const ok=v.age_s!=null&&v.age_s<(v.max_age_s||(v.kind=='rest'?400:30));return `<tr><td>${esc(k)}<td class="${ok?'up':'dn'}">${ok?'OK':'STALE'}<td>${age(v.age_s)}<td class="dim">${v.errors||0}${v.last_err?' '+esc(String(v.last_err).slice(0,40)):''}</tr>`}).join('')}</table></div>`;
+ }catch(e){$('#s-h').innerHTML='<div class="card bad">'+esc(e.message)+'</div>'}}
+
+(async()=>{try{await api('/api/ping');await api('/api/health');show('home')}catch(e){}})();
+tabs();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js').catch(()=>{});
+</script></body></html>
