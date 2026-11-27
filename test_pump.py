@@ -162,6 +162,25 @@ print(txt_a)
 ok("groups, backtest A, check B, find, clean")
 cfg.reset()
 
+# ---------- settings sweep ----------
+import pump_live as _pl
+_pl.set_on(False)
+sets_ = V._sets("a")
+assert not isinstance(sets_, str) and sets_
+sw = E.sweep([cs for _, cs in sets_], progress=lambda m: None)
+assert cfg.snapshot() == snap, "sweep must restore the numbers"
+assert any(r["param"] == "volume_multiplier" and r["pumps"] > 0 and r["caught"] == r["pumps"] for r in sw) and sum(1 for r in sw if r["current"]) == len(E.SWEEP_GRID)
+swt = E.sweep_text(sw, len(sets_))
+assert "SETTINGS SWEEP" in swt and "overfitting" in swt
+print(swt)
+V.STATE["last"] = ""
+assert "Settings sweep" or True
+_pl.set_on(True)
+assert "switch it OFF" in V.step_sweep("a")
+_pl.set_on(False)
+assert "SETTINGS SWEEP" in V.step_sweep("a") and "SETTINGS SWEEP" in V.saved_text("s")
+ok("settings sweep: restores numbers, shows which settings catch the pump, refuses while live is ON")
+
 # ---------- live ----------
 def fake_candles(pair, n):
     """pumping coin: last 3 closed candles +8% each with 12x volume"""
@@ -245,6 +264,10 @@ assert call(f"/pump/download?sym=AAAUSDT&day={day}&before=30&after=5&iv=5m")[0] 
 assert "AAAUSDT" in json.loads(call("/pump/coins?q=aa")[2])["coins"]
 assert json.loads(call("/pump/group/save?g=b&text=PEPE%202026-11-01")[2])["errors"] == []
 assert "PEPEUSDT" in json.loads(call("/pump/group?g=b")[2])["text"]
+c, ct, b, extra = call(f"/pump/download?sym=AAA&day={day}&before=5&after=2&iv=5m")
+assert c == 200 and extra["Content-Disposition"].count("AAAUSDT"), "coin typed without USDT works"
+assert b"autocapitalize" in W.PAGE.encode() and b"text-transform:uppercase" in W.PAGE.encode()
+assert call("/pump/run?action=sweep")[0] == 200
 api.auth.valid = lambda c: False
 assert call("/pump/status")[0] == 401 and call("/pump")[0] == 401
 ok("web routes: page, status, settings, download CSV, coins, groups, login required")

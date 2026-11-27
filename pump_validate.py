@@ -77,13 +77,14 @@ def step_find():
     return msg
 
 
-def step_test(g):
+def _sets(g):
+    """downloads (if not already in the temporary box) and returns [(sym, candles)] for group g, or an error text"""
     gr = groups()
     if not gr:
-        return "first run: find"
-    coins, results = gr[g], []
+        return "first save your coins (or run: find)"
+    coins, out = gr[g], []
     if not coins:
-        return f"group {g.upper()} is empty (not enough pumped coins found)"
+        return f"group {g.upper()} is empty"
     for n, c in enumerate(coins, 1):
         sym = c["sym"]
         try:
@@ -93,19 +94,45 @@ def step_test(g):
                 cs = D.fetch_pump_window(sym, c["day_ms"])
                 D.save(sym, cs)
             if len(cs) < E.WARMUP + 50:
-                log(f"{sym}: too little data, skipped")
+                log(f"{sym}: too little data ({len(cs)} candles), skipped. Check the coin name and the pump date.")
                 continue
-            results.append(E.run_coin(cs))
+            out.append((sym, cs))
         except Exception as e:
             log(f"{sym}: failed ({e})")
+    return out
+
+
+def step_test(g):
+    sets = _sets(g)
+    if isinstance(sets, str):
+        return sets
+    results = [E.run_coin(cs) for _, cs in sets]
     rows = E.aggregate(results)
     snap = {"group": g, "coins_tested": len(results), "at": int(time.time()), "strategy_config": cfg.STRATEGY_CONFIG,
             "min_strategies": cfg.MIN_STRATEGIES, "pump": cfg.PUMP, "eval": cfg.EVAL, "rows": rows}
     json.dump(snap, open(_file(f"result_{g}.json"), "w"))
     txt = E.table(rows, f"GROUP {g.upper()}: {len(results)} coins, pump = +{cfg.PUMP['pct']}% in {cfg.PUMP['window'] * 5} min, hit = +{cfg.EVAL['hit_pct']}% in {cfg.EVAL['horizon'] * 5 // 60}h")
+    for (sym, _), r in zip(sets, results):
+        if not r["pumps"]:
+            txt += f"\n{sym}: no pump matching the pump definition (+{cfg.PUMP['pct']}% in {cfg.PUMP['window'] * 5} min) was found in this data: check the date or lower the pump % in Settings"
     if g == "b":
         txt += "\n\n" + compare()
     log("done")
+    return txt
+
+
+def step_sweep(g="a"):
+    """which numbers would have caught the pump(s) in group g (one setting at a time). Needs the live scanner OFF: it shares the numbers."""
+    import pump_live
+    if pump_live.is_on():
+        return "Live scanner is ON: switch it OFF first (the sweep changes the numbers for a few minutes)."
+    sets = _sets(g)
+    if isinstance(sets, str):
+        return sets
+    rows = E.sweep([cs for _, cs in sets], progress=log)
+    txt = E.sweep_text(rows, len(sets))
+    open(_file(f"sweep_{g}.txt"), "w").write(txt)
+    log("sweep done")
     return txt
 
 
@@ -136,7 +163,7 @@ def start(action):
     def job():
         try:
             STATE["running"], STATE["last"] = action, ""
-            STATE["last"] = step_find() if action == "find" else step_test(action) if action in ("a", "b") else f"deleted {D.cleanup()} files" if action == "clean" else "unknown"
+            STATE["last"] = step_find() if action == "find" else step_test(action) if action in ("a", "b") else step_sweep("a") if action == "sweep" else f"deleted {D.cleanup()} files" if action == "clean" else "unknown"
         except Exception as e:
             STATE["last"] = f"FAILED: {e}"
             log(STATE["last"])
@@ -153,6 +180,11 @@ def status():
 
 
 def saved_text(g):
+    if g == "s":
+        try:
+            return open(_file("sweep_a.txt")).read()
+        except OSError:
+            return "no sweep yet"
     r = _read(f"result_{g}.json")
     return E.table(r["rows"], f"GROUP {g.upper()} (saved)") if r else "no result yet"
 
@@ -163,6 +195,8 @@ if __name__ == "__main__":
         print(step_find())
     elif cmd in ("a", "b"):
         print(step_test(cmd))
+    elif cmd == "sweep":
+        print(step_sweep("a"))
     elif cmd == "clean":
         print("deleted", D.cleanup(), "files")
     else:

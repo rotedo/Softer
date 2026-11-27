@@ -7,7 +7,7 @@ DOC = ("PUMP SYSTEM tools (historical Binance data; use them when the user talks
        "pump_data(sym,day,before,after,interval,oi,fr) downloads one coin around its EXACT pump day (day=YYYY-MM-DD UTC; before/after = days; interval 1m..1d) "
        "and returns a summary plus a download link for the user; pump_set_group(group,coins) group 'a' or 'b', coins=[{sym,day}] sets the user's own coins; "
        "pump_group(group) shows them; pump_settings() shows all pump numbers; pump_settings_set(changes) changes them (nested, e.g. {\"STRATEGY_CONFIG\":{\"volume_spike\":{\"volume_multiplier\":4}}}); "
-       "pump_run(action) action a|b|find starts the backtest in the background; pump_result(group) reads the last result; pump_live(on) switches the live scanner. "
+       "pump_run(action) action a|b|find|sweep starts the backtest in the background; pump_result(group) reads the last result (group 's' = the settings sweep); pump_live(on) switches the live scanner. "
        "Ask the user for a missing coin or day instead of guessing.")
 
 
@@ -51,7 +51,7 @@ TOOLS = {
     "pump_group": lambda g, **k: V.group_text(str(k.get("group", "a")).lower()),
     "pump_settings": lambda g, **k: cfg.snapshot(),
     "pump_settings_set": lambda g, **k: {"errors": cfg.save(k.get("changes") or {}) or "saved"},
-    "pump_run": lambda g, **k: V.start(str(k.get("action", "")).lower()) if str(k.get("action", "")).lower() in ("a", "b", "find") else {"error": "action must be a, b or find"},
+    "pump_run": lambda g, **k: V.start(str(k.get("action", "")).lower()) if str(k.get("action", "")).lower() in ("a", "b", "find", "sweep") else {"error": "action must be a, b, find or sweep"},
     "pump_result": lambda g, **k: V.saved_text(str(k.get("group", "a")).lower()) + ("\n" + V.compare() if str(k.get("group")).lower() == "b" else ""),
     "pump_live": lambda g, **k: (pump_live.set_on(bool(k.get("on"))), pump_live.status())[1],
 }

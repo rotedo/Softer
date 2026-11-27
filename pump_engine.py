@@ -103,7 +103,7 @@ def aggregate(results):
         days = sum(r["n"] for r in results) * STEP_MIN / 1440
         rows.append({"view": v, "alerts": len(al), "hits": sum(1 for a in al if a["hit"]), "hit_pct": _pct(sum(1 for a in al if a["hit"]), len(al)),
                      "pumps": len(ca), "caught": len(got), "catch_pct": _pct(len(got), len(ca)), "early": sum(1 for x in got if x["early"]),
-                     "avg_lead_min": _avg([x["lead_min"] for x in got]), "avg_best": _avg([a["best"] for a in al]), "avg_worst": _avg([a["worst"] for a in al]),
+                     "avg_lead_min": _avg([x["lead_min"] for x in got]), "avg_already": _avg([x["already_pct"] for x in got]), "avg_best": _avg([a["best"] for a in al]), "avg_worst": _avg([a["worst"] for a in al]),
                      "alerts_per_coin_day": round(len(al) / days, 2) if days else None})
     return rows
 
@@ -116,3 +116,53 @@ def table(rows, title=""):
                      f"{str(f(r['avg_lead_min'])):>9} {str(f(r['avg_best'])):>5} {str(f(r['avg_worst'])):>6} | {f(r['alerts_per_coin_day'])}")
     lines.append("catch% = real pumps we alerted on in time. hit% = alerts followed by the hit move; the rest are false alerts.")
     return "\n".join(lines)
+
+
+# ---------------- settings sweep: which numbers would have caught the move, and what do they cost in false alerts ----------------
+SWEEP_GRID = [("STRATEGY_CONFIG.volume_spike.volume_multiplier", [2, 3, 4, 5, 8]), ("STRATEGY_CONFIG.price_momentum.min_return_pct", [1, 2, 3, 5]),
+              ("STRATEGY_CONFIG.price_momentum.bars", [2, 3, 4]), ("STRATEGY_CONFIG.price_momentum.breakout_candles", [12, 24, 48]),
+              ("STRATEGY_CONFIG.open_interest.oi_change_percent", [2, 3, 5, 8]), ("MIN_STRATEGIES", [1, 2, 3])]
+
+
+def _nest(path, v):
+    d = v
+    for k in reversed(path.split(".")):
+        d = {k: d}
+    return d
+
+
+def sweep(sets, progress=print):
+    """Change ONE setting at a time around the current numbers and re-run the whole candle-by-candle test on every coin in `sets`.
+    Returns rows (view 'combined'). The current numbers are always restored. Nothing here knows the future."""
+    base, rows = cfg.snapshot(), []
+    try:
+        for path, vals in SWEEP_GRID:
+            cur = base
+            for k in path.split("."):
+                cur = cur[k]
+            for v in vals:
+                cfg.apply(_nest(path, v))
+                row = next(r for r in aggregate([run_coin(c) for c in sets]) if r["view"] == "combined")
+                row.update(param=path.split(".")[-1], value=v, current=(v == cur))
+                rows.append(row)
+            cfg.apply(_nest(path, cur))
+            progress(f"{path.split('.')[-1]} done")
+    finally:
+        cfg.apply(base)
+    return rows
+
+
+def sweep_text(rows, ncoins):
+    f = lambda x: "-" if x is None else x
+    out = [f"SETTINGS SWEEP on {ncoins} coin(s). One setting changed at a time (* = your current number). 'combined' = enough sensors agree.",
+           "setting              value | caught early | lead(min) already% | alerts hit% alerts/day"]
+    last = None
+    for r in rows:
+        if r["param"] != last:
+            out.append("")
+            last = r["param"]
+        out.append(f"{r['param'][:20]:20} {str(r['value']) + ('*' if r['current'] else ''):>6} | {r['caught']}/{r['pumps']} {r['early']:>6} | {str(f(r['avg_lead_min'])):>8} {str(f(r['avg_already'])):>8} | "
+                   f"{r['alerts']:6} {str(f(r['hit_pct'])):>5} {f(r['alerts_per_coin_day'])}")
+    out += ["", "How to read: lead = minutes between the alert and the top; already% = how much the price had already risen when the alert came (small = early).",
+            "Do NOT pick the single best row (that is overfitting). Prefer a RANGE of neighbouring values that all catch the move with few alerts per day, then check the same numbers on Group B."]
+    return "\n".join(out)
