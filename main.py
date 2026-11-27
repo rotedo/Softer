@@ -1,9 +1,40 @@
 """Entry point.  python main.py          -> run collector + health dashboard
                 python main.py probe    -> hit every endpoint once, print what parsed / what failed, exit"""
-import asyncio, logging, os, sys
+import asyncio, logging, os, shutil, sys
 import collector as c, config, extras as x, exchanges as ex, web, jobs, archive, screener, https_proxy
 
 ALL = "binance,bybit,okx,bitget,delta,coindcx,deribit"
+# Order-flow collection (BTC/ETH ticks, books, funding...) is OFF. The new pump system does not store anything.
+# To switch the old collector back on, set the environment variable COLLECT=1 on the server.
+COLLECT = os.environ.get("COLLECT", "0") == "1"
+
+
+def purge_old_flow(db):
+    """Delete the old order-flow data: orderflow.db (+ its -wal/-shm files) and the archive folder.
+    NEVER touches app.db (your journal, settings, keys, watchlist). Safe to run on every start."""
+    here = os.path.dirname(os.path.abspath(db))
+    app_db = os.path.abspath(os.environ.get("APP_DB") or os.path.join(here, "app.db"))
+    freed = 0
+    for f in (db, db + "-wal", db + "-shm", db + "-journal"):
+        p = os.path.abspath(f)
+        if p != app_db and os.path.isfile(p):
+            try:
+                freed += os.path.getsize(p)
+                os.remove(p)
+            except OSError as e:
+                logging.warning("could not delete %s: %s", p, e)
+    arch = os.path.abspath(os.environ.get("ARCHIVE_DIR") or os.path.join(here, "archive"))
+    if os.path.basename(arch) == "archive" and os.path.isdir(arch):  # only a folder literally named "archive"
+        for root, _, files in os.walk(arch):
+            for n in files:
+                try:
+                    freed += os.path.getsize(os.path.join(root, n))
+                except OSError:
+                    pass
+        shutil.rmtree(arch, ignore_errors=True)
+    if freed:
+        logging.info("old order-flow data deleted: %.1f MB freed", freed / 1e6)
+    return freed
 
 
 def cfg():
@@ -27,24 +58,29 @@ async def guard(coro):
 async def main():
     wish, venues = cfg()
     db, port = os.environ.get("DB_PATH", "orderflow.db"), int(os.environ.get("PORT", "8000"))
+    if not COLLECT:
+        purge_old_flow(db)  # before the sink opens the file: old data goes, an empty tiny db is recreated
     sink, state = c.Sink(db, whale_usd=float(os.environ.get("WHALE_USD", "50000")), flow_bps=float(os.environ.get("FLOW_BPS", "3"))), {"live": os.environ.get("LIVE", "0") == "1"}
     web.start_server(db, state, port)
     https_proxy.autostart()  # free HTTPS link, only if you switched it on in Settings
-    try:
-        await ex.load_ctvals()  # contract sizes must exist before the first parse
-    except Exception as e:
-        logging.warning("ctval preload failed: %s", e)
-    tasks = [sink.flusher(), x.purge(sink), ex.ctval_loop(), jobs.loop(), screener.loop()]
-    if archive.enabled():  # weekly zip -> phone -> delete (see archive.py); old purge becomes only a safety net
-        archive.raise_retention(x.RET_MS)
-        tasks.append(archive.loop(sink))
-    tasks += [ex.run_rest(sink, f, state) for f in ex.rest_feeds(wish, venues)]
-    tasks += [c.ws_run(sink, **w) for w in ex.ws_feeds(wish, venues)]
-    if "coindcx" in venues:
-        tasks.append(ex.tier_scan_dcx(sink, state, inr=float(os.environ.get("DCX_INR", "1000000")), max_bps=float(os.environ.get("DCX_MAX_BPS", "10"))))
-    if "deribit" in venues:
-        c.stat("rest-deribit", "rest")["max_age_s"] = 700
-        tasks.append(x.poll_deribit(sink))
+    if COLLECT:
+        try:
+            await ex.load_ctvals()  # contract sizes must exist before the first parse
+        except Exception as e:
+            logging.warning("ctval preload failed: %s", e)
+    tasks = [sink.flusher(), jobs.loop(), screener.loop()]
+    if COLLECT:  # old order-flow collector (OFF by default)
+        tasks += [x.purge(sink), ex.ctval_loop()]
+        if archive.enabled():  # weekly zip -> phone -> delete (see archive.py); old purge becomes only a safety net
+            archive.raise_retention(x.RET_MS)
+            tasks.append(archive.loop(sink))
+        tasks += [ex.run_rest(sink, f, state) for f in ex.rest_feeds(wish, venues)]
+        tasks += [c.ws_run(sink, **w) for w in ex.ws_feeds(wish, venues)]
+        if "coindcx" in venues:
+            tasks.append(ex.tier_scan_dcx(sink, state, inr=float(os.environ.get("DCX_INR", "1000000")), max_bps=float(os.environ.get("DCX_MAX_BPS", "10"))))
+        if "deribit" in venues:
+            c.stat("rest-deribit", "rest")["max_age_s"] = 700
+            tasks.append(x.poll_deribit(sink))
     logging.info("wishlist=%s venues=%s live=%s", wish, sorted(venues), state["live"])
     await asyncio.gather(*[guard(t) for t in tasks])
 
