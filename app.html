@@ -68,7 +68,7 @@ button.p{background:linear-gradient(135deg,#7c9bff,#c26bff);border:0;color:#fff}
 <main id="m"></main>
 <script>
 const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const TABS=[['home','<span class="ic">\u2302</span>Dashboard'],['ai','<span class="ic">\u2726</span>AI'],['scripts','<span class="ic">\u2261</span>Scripts'],['settings','<span class="ic">\u2699</span>Settings']];
+const TABS=[['home','<span class="ic">\u2302</span>Dashboard'],['ai','<span class="ic">\u2726</span>AI'],['scripts','<span class="ic">\u2261</span>Scripts'],['pump','<span class="ic">\u26A1</span>Pump'],['settings','<span class="ic">\u2699</span>Settings']];
 let TAB='home', HIST=[], TIMER=null, EDIT=null;
 async function api(p,o={}){const r=await fetch(p,Object.assign({credentials:'same-origin',headers:{}},o));
   if(r.status===401){login();throw new Error('login required')}
@@ -85,11 +85,11 @@ function login(msg){if($('#lg'))return;const d=document.createElement('div');d.i
 
 function tabs(){$('#tabs').innerHTML=TABS.map(t=>`<button class="${t[0]==TAB?'on':''}" data-t="${t[0]}">${t[1]}</button>`).join('');
  document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>show(b.dataset.t))}
-function show(t){TAB=t;clearInterval(TIMER);tabs();({home,ai,scripts,settings})[t]()}
+function show(t){if(t==='pump'){location.href='/pump';return}TAB=t;clearInterval(TIMER);tabs();({home,ai,scripts,settings})[t]()}
 
 /* ---------------- Dashboard ---------------- */
 async function home(){
- $('#m').innerHTML='<div class="card"><h2>Welcome \u{1F44B}</h2><small>Screener is watching your liquid coins (Tier 1).</small></div><div id="hd"></div>';
+ $('#m').innerHTML='<div class="card"><a href="/pump" style="display:block;text-align:center;padding:14px;border-radius:10px;background:#3d8bff;color:#fff;font-weight:600;text-decoration:none">\u26A1 Pump system: Download \u00b7 Backtest \u00b7 Live \u00b7 Settings</a></div><div class="card"><h2>Welcome \u{1F44B}</h2><small>Screener is watching your liquid coins (Tier 1).</small></div><div id="hd"></div>';
  const draw=async()=>{try{const d=await api('/api/dashboard');
   const t1=d.tiers.filter(x=>x.tier==1).length,t2=d.tiers.filter(x=>x.tier==2).length;
   $('#hd').innerHTML=`<div class="card"><div class="row"><div class="grow"><h3>Coins</h3><b style="font-size:22px">${t1+t2}</b> <small>Tier 1: ${t1} \u00b7 Tier 2: ${t2}</small></div>

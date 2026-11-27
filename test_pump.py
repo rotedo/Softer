@@ -135,6 +135,13 @@ for v in a1:
     assert [i for i in a1[v] if i <= cut] == [i for i in a2.get(v, []) if i <= cut], "changing the future changed an earlier alert: " + v
 ok("no future data: sensors see candles only up to now; changing the future leaves earlier alerts identical")
 
+import pump_custom
+pump_custom.ENABLED = True
+rc = E.run_coin(rows)
+assert "my_example_big_green" in rc["views"] and rc["views"]["my_example_big_green"]["caught"][0] is not None, "own setup is backtested as its own row"
+pump_custom.ENABLED = False
+ok("own setup (pump_custom.py) shows up as a backtest row")
+
 # ---------- validate (groups A/B, backtest, overfitting) ----------
 D_orig = D.fetch_pump_window
 assert V.set_group("a", "AAA " + time.strftime("%Y-%m-%d", time.gmtime(PUMP_DAY / 1000))) == []
@@ -199,6 +206,19 @@ assert L.status()["caught"] == 1 and L.status()["recent"][0]["sym"] == "AAA"
 assert L.cycle() == 0, "cooldown: same coin is not alerted twice"
 assert L.status()["coins"] == 3, "majors (BTC) are excluded from the universe"
 print(sent[0])
+w = L.status()["watch"]
+assert [x["sym"] for x in w] == ["AAA"] and w[0]["alerted"] and "volume_spike" in w[0]["sensors"], w
+ok_ = L.extras  # Bybit funding is used for a coin that is not on Binance
+cs = fake_candles("B-ZZZ_USDT", 60)
+L.extras(cs, "B-ZZZ_USDT", {}, {"ZZZUSDT": -0.001})
+assert cs[-1]["fr"] == -0.001
+import pump_custom
+pump_custom.ENABLED = True
+sent.clear()
+L.ST["last_alert"].clear()
+assert L.cycle() == 2 and any("MY SETUP example_big_green: AAA" in t for t in sent) and any("PUMP ALERT AAA" in t for t in sent), sent
+assert L.status()["custom"] == ["example_big_green"] and L.status()["custom_error"] == ""
+pump_custom.ENABLED = False
 ok("live cycle: pumping coin alerted once, quiet coins ignored, majors excluded, cooldown works")
 
 # ---------- web routes ----------

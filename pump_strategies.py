@@ -71,3 +71,34 @@ def funding_rate(c, conf):
     if fr is None:
         return False, "no funding data"
     return fr <= conf["negative_below"] or fr >= conf["positive_above"], f"funding {fr * 100:+.3f}%"
+
+
+# ---------------- YOUR OWN SETUPS (written in pump_custom.py) ----------------
+CUSTOM, CUSTOM_ERROR = {}, ""
+
+
+def custom(name):
+    """decorator for your own setups in pump_custom.py: function(candles) -> (True/False, note). Backtested as view 'my_<name>', alerted live on Telegram."""
+    def deco(fn):
+        CUSTOM[name] = fn
+        return fn
+    return deco
+
+
+def run_custom(candles):
+    out = {}
+    for name, fn in CUSTOM.items():
+        try:
+            r = fn(candles)
+            out[name] = (bool(r[0]), str(r[1])) if isinstance(r, tuple) else (bool(r), "")
+        except Exception as e:
+            out[name] = (False, f"error: {e}")
+    return out
+
+
+try:  # a mistake in your own file must never break the rest
+    import pump_custom  # noqa: F401
+except ImportError:
+    pass
+except Exception as _e:
+    CUSTOM_ERROR = f"pump_custom.py: {type(_e).__name__}: {_e}"

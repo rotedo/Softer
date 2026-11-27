@@ -15,6 +15,7 @@ input[type=number]{width:110px}input[type=checkbox]{width:20px;height:20px;verti
 pre{white-space:pre-wrap;word-break:break-word;font:12px/1.4 ui-monospace,monospace;margin:6px 0 0;color:#cfe0ff;max-height:42vh;overflow:auto}.d{color:var(--dim);font-size:13px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0}.row span{min-width:150px}b{display:block;margin:10px 0 2px;color:#9cc2ff}
 </style></head><body>
+<a href="/app" style="color:#9cc2ff">← App</a>
 <h2>0. Data Download (कोई भी coin, कोई भी दिन)</h2><div class="c">
 <label>Coin (नाम लिखो, जैसे PEPE)</label><input id="sym" list="cl" oninput="coins(this.value)" placeholder="PEPEUSDT" autocomplete="off"><datalist id="cl"></datalist>
 <label>पंप वाला दिन (UTC)</label><input id="day" type="date">
@@ -33,7 +34,7 @@ pre{white-space:pre-wrap;word-break:break-word;font:12px/1.4 ui-monospace,monosp
 <div id="st" class="d"></div><pre id="log"></pre></div>
 <h2>नतीजा</h2><div class="c"><button class="g" onclick="res('a')">Group A</button><button class="g" onclick="res('b')">Group B</button><pre id="res"></pre></div>
 <h2>2. Live scanner</h2><div class="c"><div id="lv" class="d"></div>
-<button onclick="live(1)">ON</button><button class="r" onclick="live(0)">OFF</button><pre id="rc"></pre></div>
+<button onclick="live(1)">ON</button><button class="r" onclick="live(0)">OFF</button><b>Alerts</b><pre id="rc"></pre><b>Watch list (अपने-आप: जिन coins में सेंसर दिखा)</b><pre id="wl"></pre><div id="cu" class="d"></div></div>
 <h2>3. Settings (सारे पंप नंबर यहीं)</h2><div class="c"><div id="set"></div>
 <button onclick="saveSet()">Save</button><button class="g" onclick="resetSet()">Default पर लौटाओ</button><div id="sm" class="d"></div></div>
 <script>
@@ -55,6 +56,7 @@ async function tick(){const d=await j('/pump/status');if(!d)return;const s=d.val
 $('st').textContent=(s.running?'चल रहा है: '+s.running:'खाली')+' | groups: '+(s.groups?'हाँ':'नहीं');
 $('log').textContent=(s.log||[]).join('\\n')+(s.last?'\\n\\n'+s.last:'');
 $('lv').textContent='Live: '+(l.on?'ON':'OFF')+' | cycles '+l.cycles+' | coins '+l.coins+' | caught '+l.caught+' | last cycle '+(l.last_cycle_s??'-')+'s'+(l.last_error?' | error: '+l.last_error:'');
+$('wl').textContent=(l.watch||[]).map(w=>w.sym+'  '+w.since_min+' min  '+w.sensors.join('+')+(w.alerted?'  ALERTED':'')).join('\\n')||'खाली';$('cu').textContent=(l.custom&&l.custom.length?'मेरे setups: '+l.custom.join(', '):'मेरे setups: कोई नहीं')+(l.custom_error?' | ❌ '+l.custom_error:'');
 $('rc').textContent=(l.recent||[]).map(a=>new Date(a.ts).toLocaleTimeString()+' '+a.sym+' '+a.score+'/100 @'+a.price).join('\\n')}
 let CF={};
 function walk(o,p){let h='';for(const[k,v]of Object.entries(o)){const path=p.concat(k).join('.');

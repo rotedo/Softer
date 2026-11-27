@@ -13,7 +13,7 @@ import pump_strategies as S
 DCX, DCX_PUB = "https://api.coindcx.com", "https://public.coindcx.com"
 STEP = 300_000
 MAJORS = {"BTC", "ETH", "BNB", "XRP", "SOL", "USDC"}
-ST = {"on": None, "cycles": 0, "coins": 0, "caught": 0, "last_cycle_s": None, "last_error": "", "recent": [], "last_alert": {}}
+ST = {"watch": {}, "on": None, "cycles": 0, "coins": 0, "caught": 0, "last_cycle_s": None, "last_error": "", "recent": [], "last_alert": {}}
 U = {"t": 0, "pairs": [], "bn": {}, "bn_vol": {}}  # universe cache (refreshed hourly)
 
 
@@ -42,8 +42,13 @@ def set_on(on):
         pass
 
 
+WATCH_MIN = 120  # a coin stays on the watch list this long after it last showed a sensor
+
+
 def status():
-    return {"on": is_on(), "cycles": ST["cycles"], "coins": ST["coins"], "caught": ST["caught"], "last_cycle_s": ST["last_cycle_s"],
+    now = time.time()
+    watch = sorted(({"sym": base(p), "since_min": round((now - w["since"]) / 60), "sensors": w["sensors"], "alerted": w["alerted"]} for p, w in ST["watch"].items()), key=lambda w: w["since_min"])
+    return {"watch": watch, "custom": list(S.CUSTOM), "custom_error": S.CUSTOM_ERROR, "on": is_on(), "cycles": ST["cycles"], "coins": ST["coins"], "caught": ST["caught"], "last_cycle_s": ST["last_cycle_s"],
             "last_error": ST["last_error"], "recent": ST["recent"][:30]}
 
 
@@ -94,8 +99,18 @@ def dcx_candles(pair, n):
     return out[-n:]
 
 
-def extras(c, sym, fund):
-    """stage 2: put open interest + funding (from Binance, else Bybit funding) on the candles. Nothing is stored."""
+def bybit_funding():
+    """funding rate of every Bybit perp in one call (used for coins that are not on Binance)"""
+    try:
+        d = GET("https://api.bybit.com/v5/market/tickers?category=linear")
+        return {t["symbol"]: float(t["fundingRate"]) for t in d["result"]["list"] if t.get("fundingRate") not in (None, "")}
+    except Exception:
+        return {}
+
+
+def extras(c, pair, fund, byb):
+    """stage 2: put open interest (Binance) and funding (Binance, else Bybit) on the candles. Nothing is stored."""
+    sym, b = bn_symbol(base(pair)), base(pair)
     if sym:
         try:
             h = D.HTTP(f"{D.BASE}/futures/data/openInterestHist?symbol={sym}&period=5m&limit=30")
@@ -104,6 +119,8 @@ def extras(c, sym, fund):
         except Exception:
             pass
     fr = fund.get(sym) if sym else None
+    if fr is None:
+        fr = next((byb[x] for x in (b + "USDT", "1000" + b + "USDT") if x in byb), None)
     if fr is not None:
         for x in c[-20:]:
             x["fr"] = fr
@@ -168,7 +185,9 @@ def cycle():
             if len(c) < 50:
                 return None
             res = S.run_all(c, only=("volume_spike", "price_momentum"))
-            return (pair, c) if any(b for b, _ in res.values()) else None
+            hit = [k for k, (b, _) in res.items() if b]
+            mine = {k: nt for k, (b, nt) in S.run_custom(c).items() if b}
+            return (pair, c, hit, mine) if hit or mine else None
         except Exception:
             errors[0] += 1
             return None
@@ -177,33 +196,47 @@ def cycle():
         for r in ex.map(stage1, U["pairs"]):
             if r:
                 stage2.append(r)
-    if U["pairs"] and errors[0] > len(U["pairs"]) / 2:
-        ST["last_error"] = f"CoinDCX candles failed for {errors[0]}/{len(U['pairs'])} coins"
-    else:
-        ST["last_error"] = ""
-    fund = {}
-    if stage2:
+    ST["last_error"] = f"CoinDCX candles failed for {errors[0]}/{len(U['pairs'])} coins" if U["pairs"] and errors[0] > len(U["pairs"]) / 2 else ""
+    now = time.time()
+    for pair, _, hit, _ in stage2:  # AI-free watch list: coins that show a sensor now stay listed for WATCH_MIN minutes
+        w = ST["watch"].setdefault(pair, {"since": now, "seen": now, "sensors": [], "alerted": False})
+        w["seen"], w["sensors"] = now, hit
+    for p in [p for p, w in ST["watch"].items() if now - w["seen"] > WATCH_MIN * 60]:
+        del ST["watch"][p]
+    fund, byb = {}, {}
+    if any(hit for _, _, hit, _ in stage2):
         try:
             fund = {r["symbol"]: float(r["lastFundingRate"]) for r in D.HTTP(D.BASE + "/fapi/v1/premiumIndex")}
         except Exception:
             pass
+        byb = bybit_funding()
     sent = 0
-    for pair, c in stage2:
-        extras(c, bn_symbol(base(pair)), fund)
+    for pair, c, hit, mine in stage2:
+        for name, note in mine.items():  # your own setups (pump_custom.py): alert on their own
+            key = (pair, name)
+            if time.time() - ST["last_alert"].get(key, 0) >= cfg.LIVE["cooldown_min"] * 60:
+                ST["last_alert"][key] = time.time()
+                _tg(f"🎯 MY SETUP {name}: {base(pair)} (CoinDCX)\nprice {c[-1]['c']:g}\n{note}")
+                ST["recent"].insert(0, {"ts": int(time.time() * 1000), "sym": base(pair), "score": 0, "price": c[-1]["c"], "reasons": {"my_" + name: note}})
+                sent += 1
+        if not hit:
+            continue
+        extras(c, pair, fund, byb)
         res = S.run_all(c)
         if sum(1 for b, _ in res.values() if b) < cfg.MIN_STRATEGIES:
             continue
         if time.time() - ST["last_alert"].get(pair, 0) < cfg.LIVE["cooldown_min"] * 60:
             continue
         ST["last_alert"][pair] = time.time()
+        ST["watch"].setdefault(pair, {"since": now, "seen": now, "sensors": hit, "alerted": True})["alerted"] = True
         text = alert_text(pair, c, res, book_imbalance(pair))
         _tg(text)
         ST["recent"].insert(0, {"ts": int(time.time() * 1000), "sym": base(pair), "score": round(100 * sum(1 for b, _ in res.values() if b) / max(1, len(res))),
                                 "price": c[-1]["c"], "reasons": {k: n_ for k, (b, n_) in res.items() if b}})
-        del ST["recent"][30:]
         ST["caught"] += 1
         sent += 1
         threading.Thread(target=explain, args=(pair, text), daemon=True).start()
+    del ST["recent"][30:]
     ST["cycles"] += 1
     ST["coins"] = len(U["pairs"])
     ST["last_cycle_s"] = round(time.time() - t0, 1)

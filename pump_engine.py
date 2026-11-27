@@ -39,7 +39,8 @@ def alerts_for(c):
         win = c[max(0, i + 1 - lb):i + 1]  # a copy that ends exactly at candle i
         res = S.run_all(win)
         ok = [k for k, (b, _) in res.items() if b]
-        views = list(ok) + (["combined"] if len(ok) >= cfg.MIN_STRATEGIES else [])
+        mine = ["my_" + k for k, (b, _) in S.run_custom(win).items() if b]  # your own setups: own views, not part of 'combined'
+        views = ok + mine + (["combined"] if len(ok) >= cfg.MIN_STRATEGIES else [])
         for v in views:
             if i - last.get(v, -10 ** 9) > cool:
                 out.setdefault(v, []).append(i)
@@ -67,7 +68,7 @@ def run_coin(c):
     """one coin -> {n, pumps, views: {view: {alerts: [judged], caught: [per pump: None or {...}]}}}"""
     pumps = [p for p in label_pumps(c) if p["start"] >= WARMUP]
     al, views = alerts_for(c), {}
-    names = [k for k, v in cfg.STRATEGY_CONFIG.items() if v.get("enabled")] + ["combined"]
+    names = [k for k, v in cfg.STRATEGY_CONFIG.items() if v.get("enabled")] + ["my_" + k for k in S.CUSTOM] + ["combined"]
     for v in names:
         idx = al.get(v, [])
         judged = [j for j in (judge(c, i) for i in idx) if j]
