@@ -4,6 +4,10 @@ from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import collector as c
 import api, pwa
+try:  # pump system page (pump_web.py); the rest of the app keeps working even if it fails to load
+    import pump_web
+except Exception:
+    pump_web = None
 
 TABLES = c.TABLES
 START = time.time()
@@ -143,6 +147,8 @@ def start_server(db, state, port):
                 return self._send(200, "application/json", json.dumps({"live": bool(state.get("live"))}).encode())
             if self.path.startswith("/diag"):
                 return self._send(200, "application/json", json.dumps(diag(db), indent=1).encode())
+            if pump_web and self.path.startswith("/pump"):
+                return self._send(*pump_web.handle(self.path, dict(self.headers)))
             hit = pwa.asset(self.path)
             if hit:
                 return self._send(200, hit[0], hit[1], {"Cache-Control": hit[2], "Service-Worker-Allowed": "/"})

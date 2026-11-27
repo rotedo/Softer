@@ -2,6 +2,10 @@
                 python main.py probe    -> hit every endpoint once, print what parsed / what failed, exit"""
 import asyncio, logging, os, shutil, sys
 import collector as c, config, extras as x, exchanges as ex, web, jobs, archive, screener, https_proxy
+try:
+    import pump_live
+except Exception:  # the old app must still start if the pump files are broken
+    pump_live = None
 
 ALL = "binance,bybit,okx,bitget,delta,coindcx,deribit"
 # Order-flow collection (BTC/ETH ticks, books, funding...) is OFF. The new pump system does not store anything.
@@ -69,6 +73,8 @@ async def main():
         except Exception as e:
             logging.warning("ctval preload failed: %s", e)
     tasks = [sink.flusher(), jobs.loop(), screener.loop()]
+    if pump_live:
+        tasks.append(pump_live.loop())  # live pump scanner: runs 24x7, scans only while switched ON on the /pump page
     if COLLECT:  # old order-flow collector (OFF by default)
         tasks += [x.purge(sink), ex.ctval_loop()]
         if archive.enabled():  # weekly zip -> phone -> delete (see archive.py); old purge becomes only a safety net

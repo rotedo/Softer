@@ -94,6 +94,11 @@ TOOLS = {
     "vision_study": lambda g, **k: vision.pump_study(_sym(k), str(k.get("day", ""))),
     "save_script": lambda g, **k: {"saved_id": __import__("screener").save_script({"name": k.get("name"), "code": k.get("code"), "tf": k.get("tf", "15m"), "on": False}), "note": "saved OFF; the user turns it ON in the Scripts tab"},
 }
+try:  # pump system tools (pump_ai.py); the chat keeps working even if that file is missing
+    import pump_ai
+    TOOLS.update(pump_ai.TOOLS)
+except ImportError:
+    pump_ai = None
 
 SYS = ("You are a trading-analysis agent inside an order-flow terminal. Role: {work}\nFree tier: keep calls few. Reply with JSON ONLY, no markdown. "
        'Either {{"tool":"name","args":{{}}}} or {{"answer":"short text","draw":[{{"type":"line|box","t1":ms,"p1":price,"t2":ms,"p2":price}}]}}.\n'
@@ -121,6 +126,9 @@ CHAT_SYS = (
     "Tools: scan_coins(syms,tf), get_levels(sym,tf), get_bundle(sym,tf), get_liq(sym), get_gex(ccy), get_book(sym), get_derivs(sym), get_tiers(), get_news(), get_calendar(), "
     "run_backtest(strategy,sym,tf,n,lev,sl,tp), scan_pattern(points), vision_study(sym,day), save_script(name,code,tf).\n"
     "9. save_script: when the user asks for an alert/screener rule, write Python defining signals(c, f) (returns a list: 1 long, -1 short, 0 none, one per candle; c[i] has t,o,h,l,c,v,delta,bp,cvd; f has delta,bp,cvd,body,upper,lower; helpers sma ema highest lowest atr math; no imports) and save it. It is saved OFF and fires Telegram alerts on Tier 1/2 coins once the user turns it ON.")
+if pump_ai:
+    CHAT_SYS += pump_ai.DOC + "\n"
+
 
 
 def _loop(system, msg, key, ag=None, depth=0):
