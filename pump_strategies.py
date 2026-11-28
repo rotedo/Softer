@@ -46,6 +46,19 @@ def quality(c):
     return True, ""
 
 
+def strength(c):
+    """how strong the move is NOW (used only to rank coins that fire together). Past only. = volume multiple/3 + 15-min rise %/2 + candle-size multiple/3 (each part capped)"""
+    if len(c) < 52:
+        return 0.0
+    avg = sum(x["q"] for x in c[-49:-1]) / 48
+    vol = min(c[-1]["q"] / avg, 30) if avg > 0 else 0
+    ret = max(0.0, min((c[-1]["c"] / c[-4]["c"] - 1) * 100, 30)) if c[-4]["c"] > 0 else 0
+    rg = lambda x: (x["h"] - x["l"]) / x["o"] if x["o"] > 0 else 0
+    ra = sum(rg(x) for x in c[-49:-1]) / 48
+    rng = min(rg(c[-1]) / ra, 30) if ra > 0 else 0
+    return round(vol / 3 + ret / 2 + rng / 3, 2)
+
+
 def decide(c):
     """THE alert decision, identical in backtest and live. c = candles up to now.
     -> (views that fire as a set, notes {sensor: (ok, text)}, reject reason or ''). 'combined' = MIN_STRATEGIES sensors agree on every one of the last confirm_candles candles."""

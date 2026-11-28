@@ -158,14 +158,35 @@ def dcx_bases():
 
 
 def eval_candidate(coins, tag):
-    """alerts on every coin with the CURRENT settings. -> (summary dict, sample lines, pump lines)"""
+    """alerts on every coin with the CURRENT settings, then the cross-coin selector (same code as live). -> (summary dict, sample lines, pump lines)"""
+    import pump_select as SEL, pump_strategies as S
+    lb = int(cfg.EVAL["lookback"])
+    events, days = [], 0.0
+    for sym, c in coins.items():
+        days += len(c) / 288
+        for i in E.alerts_for(c).get("combined", []):
+            events.append((c[i]["t"], sym, i, S.strength(c[max(0, i + 1 - lb):i + 1])))
+    events.sort()
+    chosen, sel, k = {}, SEL.Selector(), 0
+    while k < len(events):  # one 5-minute candle at a time, like the live scan
+        t = events[k][0]
+        grp = []
+        while k < len(events) and events[k][0] == t:
+            grp.append(events[k])
+            k += 1
+        if not cfg.SELECT["enabled"]:
+            best, others = None, []
+            for e in grp:
+                chosen.setdefault(e[1], []).append((e[2], e[3], 0))
+            continue
+        best, others, _ = sel.step(t, [((e[1], e[2]), e[3]) for e in grp])
+        if best:
+            chosen.setdefault(best[0][0], []).append((best[0][1], best[1], len(others)))
     n = hit = hit24 = pumps = caught = early = 0
-    days = 0.0
     samples, plines = [], []
     for sym, c in coins.items():
-        al = E.alerts_for(c).get("combined", [])
-        days += len(c) / 288
-        for i in al:
+        al = [x[0] for x in chosen.get(sym, [])]
+        for i, sc, lk in chosen.get(sym, []):
             j = E.judge(c, i)
             if not j:
                 continue
@@ -173,7 +194,7 @@ def eval_candidate(coins, tag):
             hit += j["hit"]
             b24 = (max(x["h"] for x in c[i + 1:i + 289]) / c[i]["c"] - 1) * 100
             hit24 += b24 >= 20
-            samples.append((sym, utc(c[i]["t"]), j["best"], j["worst"], round(b24, 1)))
+            samples.append((sym, utc(c[i]["t"]), j["best"], j["worst"], round(b24, 1), f"strength {sc}", f"linked {lk}"))
         for p in (p for p in E.label_pumps(c) if p["start"] >= E.WARMUP):
             pumps += 1
             a = next((i for i in al if p["start"] - 6 <= i <= p["peak"]), None)
@@ -185,6 +206,7 @@ def eval_candidate(coins, tag):
             early += already <= 10
             plines.append(f"caught {sym} bottom {utc(c[p['start']]['t'])} +{p['gain']}% alert {utc(c[a]['t'])} already +{already:.0f}%")
     d = max(days / max(1, len(coins)), 1e-9)  # days per coin
+    samples.sort(key=lambda x: x[1])
     return {"tag": tag, "alerts": n, "alerts_day": round(n / d, 1), "right10": round(100 * hit / n, 1) if n else None, "right20_24h": round(100 * hit24 / n, 1) if n else None,
             "pumps": pumps, "pumps_day": round(pumps / d, 1), "caught": caught, "early": early}, samples, plines
 
@@ -228,7 +250,7 @@ def universe(job):
         out.append(f"{r['tag'][:28]:28} {r['alerts_day']:10} {str(r['right10']):>17} {str(r['right20_24h']):>19} | {r['pumps_day']:9} {r['caught']:>3}/{r['pumps']:<4} {r['early']}")
     out.append("alerts/day = over ALL coins together. right = share of alerts followed by that rise. pumps = real moves (label) found in the same data.")
     tag, samples, plines = first
-    out += ["", f"PUMPS for candidate '{tag}':"] + plines[:80] + ["", f"SAMPLE ALERTS for '{tag}' (coin, time, best%, worst%, best in 24h%):"] + [str(x) for x in samples[:40]]
+    out += ["", f"PUMPS for candidate '{tag}':"] + plines[:80] + ["", f"SAMPLE ALERTS for '{tag}' (coin, time, best%, worst%, best in 24h%):"] + [str(x) for x in samples[:60]]
     return "\n".join(out)
 
 
