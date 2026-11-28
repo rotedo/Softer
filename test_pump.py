@@ -116,14 +116,28 @@ rq = E.run_coin(quiet)
 assert rq["pumps"] == [] and not rq["views"]["combined"]["alerts"], "no alerts on a quiet coin"
 ok("pump labelled, caught early by combined, no false alerts on quiet coin")
 
-seen = []
-orig = dict(S.REG)
+seen, cur = [], [None]
+orig, orig_decide = dict(S.REG), S.decide
 for name, fn in orig.items():
-    S.REG[name] = (lambda f: lambda w, conf: (seen.append((len(w), w[-1]["t"])), f(w, conf))[1])(fn)
+    def wrap(f):
+        def g(w, conf):
+            assert w[-1]["t"] <= cur[0], "a sensor saw a candle later than the one being judged"
+            return f(w, conf)
+        return g
+    S.REG[name] = wrap(fn)
+
+
+def spy_decide(w):
+    seen.append(w[-1]["t"])
+    cur[0] = w[-1]["t"]
+    return orig_decide(w)
+
+
+S.decide = spy_decide
 E.alerts_for(rows)
+S.decide = orig_decide
 S.REG.update(orig)
-ts = sorted({t for _, t in seen})
-assert ts == [r["t"] for r in rows[E.WARMUP:]], "every call must end exactly at the candle being judged"
+assert seen == [r["t"] for r in rows[E.WARMUP:]], "every decision must end exactly at the candle being judged"
 cut = len(rows) // 2
 mod = [dict(r) for r in rows]
 for r in mod[cut + 1:]:
@@ -183,7 +197,7 @@ ok("settings sweep: restores numbers, shows which settings catch the pump, refus
 
 # ---------- live ----------
 def fake_candles(pair, n):
-    """pumping coin: last 3 closed candles +8% each with 12x volume"""
+    """pumping coin: last 2 closed candles +4.5% each with 12x volume (an alert at the START of the move, not late)"""
     sym = L.base(pair) + "USDT"
     out = []
     p = 100.0
@@ -192,8 +206,8 @@ def fake_candles(pair, n):
     for i in range(n):
         o = p
         vol = 1000 * (1 + rnd.random() * 0.3)
-        if sym == "AAAUSDT" and i >= n - 3:
-            p *= 1.08
+        if sym == "AAAUSDT" and i >= n - 2:
+            p *= 1.045
             vol *= 12
         else:
             p *= 1 + rnd.uniform(-0.002, 0.002)
@@ -220,11 +234,27 @@ L.set_on(True)
 assert L.is_on() and L.ST["on"]
 n = L.cycle()
 assert n == 1 and len(sent) == 1 and "AAA" in sent[0] and "BTC" not in sent[0], sent
-assert "volume_spike" in sent[0] and "bids" in sent[0]
+assert "volume अचानक बढ़ा" in sent[0] and "bids" in sent[0]
 assert L.status()["caught"] == 1 and L.status()["recent"][0]["sym"] == "AAA"
 assert L.cycle() == 0, "cooldown: same coin is not alerted twice"
 assert L.status()["coins"] == 3, "majors (BTC) are excluded from the universe"
 print(sent[0])
+assert L.JOURNAL and L.JOURNAL[0]["sym"] == "AAA" and "volume_spike" in L.JOURNAL[0]["reasons"] and "कारण" in sent[0], (L.JOURNAL, sent[0])
+assert L.status()["journal"][0]["verdict"] == ""
+rec = L.JOURNAL[0]
+rec["ts"] = NOW - 25_200_000
+sent.clear()
+L.follow_up()  # fake candles end at a price far above this record's price (124): no rise after it => WRONG with reasons
+assert rec["verdict"] == "WRONG" and "गलत" in rec["why"] and sent and "नतीजा" in sent[0], rec
+rec2 = dict(rec, verdict="", why="", price=90.0, ts=NOW - 25_200_000)
+L.JOURNAL.insert(0, rec2)
+sent.clear()
+L.follow_up()
+assert rec2["verdict"] == "RIGHT" and "सही" in rec2["why"], rec2
+L.JOURNAL.clear(); L.JLOADED[0] = False
+import store
+assert len(store.kv_get("pump_journal", [])) >= 1, "journal is saved in the app database"
+L.JOURNAL[:] = store.kv_get("pump_journal", [])
 w = L.status()["watch"]
 assert [x["sym"] for x in w] == ["AAA"] and w[0]["alerted"] and "volume_spike" in w[0]["sensors"], w
 ok_ = L.extras  # Bybit funding is used for a coin that is not on Binance

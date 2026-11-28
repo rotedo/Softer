@@ -37,10 +37,7 @@ def alerts_for(c):
     out, last = {}, {}
     for i in range(WARMUP, len(c)):
         win = c[max(0, i + 1 - lb):i + 1]  # a copy that ends exactly at candle i
-        res = S.run_all(win)
-        ok = [k for k, (b, _) in res.items() if b]
-        mine = ["my_" + k for k, (b, _) in S.run_custom(win).items() if b]  # your own setups: own views, not part of 'combined'
-        views = ok + mine + (["combined"] if len(ok) >= cfg.MIN_STRATEGIES else [])
+        views, _, _ = S.decide(win)
         for v in views:
             if i - last.get(v, -10 ** 9) > cool:
                 out.setdefault(v, []).append(i)

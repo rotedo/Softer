@@ -91,4 +91,14 @@ json.dump(job, open("job3.json", "w"))
 LAB.main("job3.json")
 assert "bad settings" in open("lab_results/t_test.md").read()
 print("OK   lab: profile + test + bad settings reported")
+cfg.reset()
+job = {"name": "t_universe", "mode": "universe", "end": "2026-11-17", "days": 6, "syms": ["AAAUSDT", "BBBUSDT", "BTCUSDT"], "settings": {"PUMP": {"pct": 30, "window": 288}},
+       "candidates": [{"tag": "no filters", "settings": {"FILTER": {"max_run_pct": 0, "min_candle_usd": 0, "max_wick_ratio": 1}}}, {"tag": "defaults", "settings": {}, "detail": True},
+                      {"tag": "strict", "settings": {"MIN_STRATEGIES": 3, "FILTER": {"confirm_candles": 2}}}]}
+json.dump(job, open("job4.json", "w"))
+LAB.main("job4.json")
+u = open("lab_results/t_universe.md").read()
+assert "FAILED" not in u and "no filters" in u and "strict" in u and "PUMPS for candidate 'defaults'" in u and "caught AAA" in u and "coins with data: 2" in u, u[:2500]
+print(u[:1800])
+print("OK   universe mode")
 print("ALL LAB TESTS PASSED (fake data only)")

@@ -26,19 +26,25 @@ STRATEGY_CONFIG = {
     "trades_spike": {"enabled": False, "multiplier": 3.0, "base_candles": 48},
     "range_expansion": {"enabled": False, "multiplier": 4.0, "base_candles": 48},
 }
+# garbage filters, applied to EVERY alert (backtest and live the same way). 0 / large value = switch that filter off
+#  max_run_pct: skip if price already rose more than this % from the lowest low of the last run_candles candles (= we are late, not at the start)
+#  min_candle_usd: skip thin coins: average USDT traded per 5m candle over the last 3 candles must be at least this
+#  confirm_candles: sensors must agree on this many candles in a row (1 = off; 2 removes one-candle spikes)
+#  max_wick_ratio: skip if the last candle closed far below its high (share of the candle range given back; 1 = off)
+FILTER = {"max_run_pct": 15.0, "run_candles": 36, "min_candle_usd": 3000.0, "confirm_candles": 1, "max_wick_ratio": 0.6}
 MIN_STRATEGIES = 2  # alert only when at least this many sensors agree at the same time
 # live scanner (CoinDCX 5m candles for every coin, other exchanges only for data)
 LIVE = {"min_quote_vol_24h": 2000000, "workers": 8, "cooldown_min": 60, "klines": 60, "delay_s": 8}
 
-_SECTIONS = ("PUMP", "FIND", "WINDOW", "EVAL", "STRATEGY_CONFIG", "LIVE")
+_SECTIONS = ("PUMP", "FIND", "WINDOW", "EVAL", "STRATEGY_CONFIG", "LIVE", "FILTER")
 _DEFAULT = copy.deepcopy({k: globals()[k] for k in _SECTIONS})
 _DEFAULT["MIN_STRATEGIES"] = MIN_STRATEGIES
 _INT = {"window", "horizon", "cooldown", "lookback", "base_candles", "bars", "breakout_candles", "group_a", "group_b", "days", "before_days",
-        "after_days", "workers", "klines", "cooldown_min", "MIN_STRATEGIES", "delay_s", "min_quote_vol_24h", "candles"}
+        "after_days", "workers", "klines", "cooldown_min", "MIN_STRATEGIES", "delay_s", "min_quote_vol_24h", "candles", "run_candles", "confirm_candles"}
 _RANGE = {"pct": (0.1, 10000), "window": (1, 288), "days": (1, 30), "min_day_gain": (1, 10000), "group_a": (0, 200), "group_b": (0, 400),
           "before_days": (0, 30), "after_days": (0, 30), "hit_pct": (0.1, 10000), "horizon": (1, 2000), "cooldown": (0, 2000), "lookback": (60, 1000),
           "volume_multiplier": (1, 1000), "base_candles": (5, 288), "min_buy_ratio": (0, 1), "min_return_pct": (0, 1000), "bars": (1, 50),
-          "breakout_candles": (1, 288), "oi_change_percent": (0, 1000), "min_price_pct": (-100, 1000), "candles": (3, 576), "max_price_pct": (0, 1000), "multiplier": (1, 1000), "negative_below": (-1, 0), "positive_above": (0, 1),
+          "breakout_candles": (1, 288), "oi_change_percent": (0, 1000), "min_price_pct": (-100, 1000), "candles": (3, 576), "max_run_pct": (0, 100000), "run_candles": (3, 576), "min_candle_usd": (0, 1e9), "confirm_candles": (1, 6), "max_wick_ratio": (0, 1), "max_price_pct": (0, 1000), "multiplier": (1, 1000), "negative_below": (-1, 0), "positive_above": (0, 1),
           "MIN_STRATEGIES": (1, 10), "min_quote_vol_24h": (0, 1e12), "workers": (1, 16), "cooldown_min": (0, 1440), "klines": (60, 500), "delay_s": (0, 120)}
 
 

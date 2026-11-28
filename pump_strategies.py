@@ -28,6 +28,44 @@ def run_all(candles, only=None):
     return out
 
 
+def quality(c):
+    """garbage filters (cfg.FILTER). -> (ok, reason text if rejected)"""
+    f = cfg.FILTER
+    last = c[-1]
+    if f["min_candle_usd"] > 0 and len(c) >= 3 and sum(x["q"] for x in c[-3:]) / 3 < f["min_candle_usd"]:
+        return False, "thin coin (little money traded per candle)"
+    k = int(f["run_candles"])
+    if f["max_run_pct"] > 0 and len(c) >= k:
+        low = min(x["l"] for x in c[-k:])
+        run = (last["c"] / low - 1) * 100 if low > 0 else 0
+        if run > f["max_run_pct"]:
+            return False, f"late: already +{run:.0f}% from the recent low"
+    rng = last["h"] - last["l"]
+    if f["max_wick_ratio"] < 1 and rng > 0 and (last["h"] - last["c"]) / rng > f["max_wick_ratio"]:
+        return False, "candle closed far below its high (spike)"
+    return True, ""
+
+
+def decide(c):
+    """THE alert decision, identical in backtest and live. c = candles up to now.
+    -> (views that fire as a set, notes {sensor: (ok, text)}, reject reason or ''). 'combined' = MIN_STRATEGIES sensors agree on every one of the last confirm_candles candles."""
+    ok, why = quality(c)
+    if not ok:
+        return set(), {}, why
+    views, notes = None, {}
+    for k in range(int(cfg.FILTER["confirm_candles"])):
+        sub = c[:len(c) - k] if k else c
+        res = run_all(sub)
+        if k == 0:
+            notes = res
+        fired = {n for n, (b, _) in res.items() if b}
+        v = set(fired) | {"my_" + n for n, (b, _) in run_custom(sub).items() if b}
+        if len(fired) >= cfg.MIN_STRATEGIES:
+            v.add("combined")
+        views = v if views is None else views & v
+    return views or set(), notes, ""
+
+
 @strategy("volume_spike")
 def volume_spike(c, conf):
     n = int(conf["base_candles"])

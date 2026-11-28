@@ -2,7 +2,7 @@
 Gives, for any past day: 5m candles, open interest (5m, 'metrics' files, any age), taker long/short ratio, and monthly funding.
 Only COMPLETE days exist (yesterday is the newest). Same candle format as pump_download.fetch: {t,o,h,l,c,v,q,n,tb,oi,fr} + tls.
 GET is a plain function so tests can replace it."""
-import csv, datetime as dt, io, urllib.error, urllib.request, zipfile
+import csv, datetime as dt, io, re, urllib.error, urllib.request, zipfile
 from concurrent.futures import ThreadPoolExecutor
 import pump_download as D
 
@@ -101,3 +101,23 @@ def fetch(sym, d0, d1):
     else:
         notes.append(f"{sym}: no funding file (current month is published only after it ends)")
     return rows, notes
+
+
+S3 = "https://s3-ap-northeast-1.amazonaws.com/data.binance.vision"
+
+
+def list_symbols():
+    """every USDT perpetual that has candle files on Binance Vision (the whole futures universe, ~500)"""
+    out, marker = [], ""
+    while True:
+        b = GET(f"{S3}?delimiter=/&prefix=data/futures/um/daily/klines/&max-keys=1000" + (f"&marker={marker}" if marker else ""))
+        if not b:
+            break
+        text = b.decode("utf-8", "ignore")
+        names = re.findall(r"<Prefix>data/futures/um/daily/klines/([^/<]+)/</Prefix>", text)
+        out += names
+        if "<IsTruncated>true</IsTruncated>" in text and names:
+            marker = "data/futures/um/daily/klines/" + names[-1] + "/"
+        else:
+            break
+    return sorted(n for n in set(out) if n.endswith("USDT") and "_" not in n)

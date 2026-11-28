@@ -42,14 +42,107 @@ def set_on(on):
         pass
 
 
+SENSOR_HI = {"volume_spike": "volume अचानक बढ़ा", "price_momentum": "कीमत तेज़ी से ऊपर + पुरानी high टूटी", "open_interest": "Open Interest तेज़ी से बढ़ा",
+             "funding_rate": "funding असामान्य", "oi_build": "OI जमा हो रहा है", "trades_spike": "ट्रेड की संख्या उछली", "range_expansion": "कैंडल का आकार फैला"}
+JOURNAL = []  # forward test: every alert with its reasons, and later its outcome. Only alerts are kept (small), saved in the app database.
+JLOADED = [False]
+
+
+def _jload():
+    if not JLOADED[0]:
+        JLOADED[0] = True
+        try:
+            import store
+            JOURNAL[:] = store.kv_get("pump_journal", []) or []
+        except Exception:
+            pass
+
+
+def _jsave():
+    try:
+        import store
+        store.kv_set("pump_journal", JOURNAL[:100])
+    except Exception:
+        pass
+
+
+def diagnose(rec, peak, peak_min, trough, trough_min, end):
+    """plain-words verdict. -> (verdict RIGHT/WRONG, reason text). Uses only what was recorded at alert time + the price path after it."""
+    hit = cfg.EVAL["hit_pct"]
+    f = rec.get("feat", {})
+    if peak >= hit:
+        txt = f"✅ सही: {peak_min} मिनट में +{peak:.1f}% तक गया"
+        if trough <= -5:
+            txt += f" (पर पहले {trough_min} मिनट पर {trough:.1f}% तक गिरा था: जोखिम)"
+        return "RIGHT", txt
+    why = []
+    if peak < 3:
+        why.append(f"कोई follow-through नहीं: सबसे ऊपर सिर्फ़ +{peak:.1f}%")
+    elif peak_min <= 30 and end < peak / 2:
+        why.append(f"तेज़ स्पाइक जो लौट गया (pump & dump): {peak_min} मिनट में +{peak:.1f}%, अंत में {end:+.1f}%")
+    else:
+        why.append(f"उछाल +{peak:.1f}% तक ही पहुँचा, लक्ष्य +{hit:g}% था")
+    if trough <= -5 and trough_min <= 30:
+        why.append(f"alert के बाद {trough_min} मिनट में ही {trough:.1f}% गिरा")
+    if f.get("imb") is not None and f["imb"] < 0.45:
+        why.append(f"ऑर्डरबुक में बेचने वाले ज़्यादा थे (सिर्फ़ {int(f['imb'] * 100)}% bids)")
+    if f.get("run", 0) > 8:
+        why.append(f"alert के समय तक पहले ही +{f['run']:.0f}% चढ़ चुका था (देर से पकड़ा)")
+    if f.get("fr") is not None and f["fr"] > 0.0005:
+        why.append(f"funding बहुत ऊँची ({f['fr'] * 100:.3f}%): खरीदार पहले से भरे हुए थे")
+    if not any(k in rec["reasons"] for k in ("open_interest", "oi_build", "funding_rate")):
+        why.append("सिर्फ़ volume और कीमत के सेंसर थे, OI/funding से पुष्टि नहीं मिली")
+    return "WRONG", "❌ गलत: " + "; ".join(why)
+
+
+def follow_up():
+    """checks pending alerts against the price after them; finalises after EVAL.horizon candles and tells Telegram"""
+    _jload()
+    now, changed = time.time(), False
+    for rec in JOURNAL:
+        if rec.get("verdict"):
+            continue
+        age = now - rec["ts"] / 1000
+        if age < 600:
+            continue
+        try:
+            n = min(300, int(age // 300) + 4)
+            c = [x for x in dcx_candles(rec["pair"], n) if x["t"] >= rec["ts"] - 300_000 * 0]
+        except Exception:
+            continue
+        c = [x for x in c if x["t"] + STEP > rec["ts"]]
+        if not c:
+            continue
+        p0 = rec["price"]
+        hi = max(c, key=lambda x: x["h"])
+        lo = min(c, key=lambda x: x["l"])
+        peak, trough = (hi["h"] / p0 - 1) * 100, (lo["l"] / p0 - 1) * 100
+        pm, tm = max(0, (hi["t"] - rec["ts"]) // 60000), max(0, (lo["t"] - rec["ts"]) // 60000)
+        end = (c[-1]["c"] / p0 - 1) * 100
+        rec["path"] = {"peak": round(peak, 1), "peak_min": int(pm), "trough": round(trough, 1), "trough_min": int(tm), "now": round(end, 1)}
+        done = age >= cfg.EVAL["horizon"] * 300 or peak >= cfg.EVAL["hit_pct"] * 2
+        if done:
+            rec["verdict"], rec["why"] = diagnose(rec, peak, int(pm), trough, int(tm), end)
+            _tg(f"📋 {rec['sym']} अलर्ट का नतीजा ({time.strftime('%H:%M', time.localtime(rec['ts'] / 1000))} का)\n{rec['why']}")
+        changed = True
+    if changed:
+        _jsave()
+
+
 WATCH_MIN = 120  # a coin stays on the watch list this long after it last showed a sensor
+
+
+def journal_view():
+    _jload()
+    return [{"ts": r["ts"], "sym": r["sym"], "price": r["price"], "verdict": r.get("verdict", ""), "why": r.get("why", ""), "path": r.get("path"),
+             "reasons": r["reasons"]} for r in JOURNAL[:30]]
 
 
 def status():
     now = time.time()
     watch = sorted(({"sym": base(p), "since_min": round((now - w["since"]) / 60), "sensors": w["sensors"], "alerted": w["alerted"]} for p, w in ST["watch"].items()), key=lambda w: w["since_min"])
     return {"watch": watch, "custom": list(S.CUSTOM), "custom_error": S.CUSTOM_ERROR, "on": is_on(), "cycles": ST["cycles"], "coins": ST["coins"], "caught": ST["caught"], "last_cycle_s": ST["last_cycle_s"],
-            "last_error": ST["last_error"], "recent": ST["recent"][:30]}
+            "last_error": ST["last_error"], "recent": ST["recent"][:30], "journal": journal_view()}
 
 
 def base(pair):  # B-PEPE_USDT -> PEPE
@@ -140,11 +233,11 @@ def book_imbalance(pair):
 def alert_text(pair, c, res, imb):
     ok = {k: n for k, (b, n) in res.items() if b}
     px = (c[-1]["c"] / c[-13]["c"] - 1) * 100 if len(c) > 13 else 0
-    lines = [f"🚨 PUMP ALERT {base(pair)} (CoinDCX)", f"price {c[-1]['c']:g} | 1h {px:+.1f}% | sensors {len(ok)}/{len(res)}"]
-    lines += [f"- {k}: {n}" for k, n in ok.items()]
+    lines = [f"🚨 PUMP ALERT {base(pair)} (CoinDCX)", f"कीमत {c[-1]['c']:g} | 1 घंटे में {px:+.1f}% | सेंसर {len(ok)}/{len(res)}", "कारण:"]
+    lines += [f"- {SENSOR_HI.get(k, k)}: {n}" for k, n in ok.items()]
     if imb is not None:
-        lines.append(f"- order book: {int(imb * 100)}% bids")
-    lines.append("(automatic scan, not advice)")
+        lines.append(f"- ऑर्डरबुक: {int(imb * 100)}% bids")
+    lines.append("(अपने-आप स्कैन, सलाह नहीं)")
     return "\n".join(lines)
 
 
@@ -222,21 +315,32 @@ def cycle():
         if not hit:
             continue
         extras(c, pair, fund, byb)
-        res = S.run_all(c)
-        if sum(1 for b, _ in res.values() if b) < cfg.MIN_STRATEGIES:
+        views, res, why = S.decide(c)  # same decision code as the backtest (sensors + garbage filters + confirmation)
+        if "combined" not in views:
             continue
         if time.time() - ST["last_alert"].get(pair, 0) < cfg.LIVE["cooldown_min"] * 60:
             continue
         ST["last_alert"][pair] = time.time()
         ST["watch"].setdefault(pair, {"since": now, "seen": now, "sensors": hit, "alerted": True})["alerted"] = True
-        text = alert_text(pair, c, res, book_imbalance(pair))
+        imb = book_imbalance(pair)
+        text = alert_text(pair, c, res, imb)
         _tg(text)
-        ST["recent"].insert(0, {"ts": int(time.time() * 1000), "sym": base(pair), "score": round(100 * sum(1 for b, _ in res.values() if b) / max(1, len(res))),
-                                "price": c[-1]["c"], "reasons": {k: n_ for k, (b, n_) in res.items() if b}})
+        reasons = {k: n_ for k, (b, n_) in res.items() if b}
+        ST["recent"].insert(0, {"ts": int(time.time() * 1000), "sym": base(pair), "score": round(100 * len(reasons) / max(1, len(res))), "price": c[-1]["c"], "reasons": reasons})
+        low = min(x["l"] for x in c[-int(cfg.FILTER["run_candles"]):])
+        _jload()
+        JOURNAL.insert(0, {"ts": int(c[-1]["t"] + STEP), "pair": pair, "sym": base(pair), "price": c[-1]["c"], "reasons": reasons,
+                           "feat": {"imb": imb, "run": round((c[-1]["c"] / low - 1) * 100, 1), "fr": c[-1].get("fr")}})
+        del JOURNAL[100:]
+        _jsave()
         ST["caught"] += 1
         sent += 1
         threading.Thread(target=explain, args=(pair, text), daemon=True).start()
     del ST["recent"][30:]
+    try:
+        follow_up()
+    except Exception as e:
+        logging.warning("journal follow-up failed: %s", e)
     ST["cycles"] += 1
     ST["coins"] = len(U["pairs"])
     ST["last_cycle_s"] = round(time.time() - t0, 1)

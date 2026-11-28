@@ -3,6 +3,7 @@
 job.json = {"name": "...", "mode": "profile" | "test", "settings": {pump_config changes}, "sweep": false, "coins": [{"sym": "VELVET", "from": "2026-11-12", "to": "2026-11-27"}]}
 Writes lab_results/<name>.md (+ .json). Everything the sensors see is the past only; the pump labels are only the answer key."""
 import datetime as dt, json, os, statistics as st, sys, time, traceback
+from concurrent.futures import ThreadPoolExecutor
 import pump_config as cfg, pump_engine as E, pump_vision as VI
 
 OUT = "lab_results"
@@ -144,6 +145,96 @@ def test(coins, sweep):
     return "\n".join(out)
 
 
+MAJORS = {"BTC", "ETH", "BNB", "XRP", "SOL", "USDC", "BUSD", "TUSD", "FDUSD"}
+
+
+def dcx_bases():
+    """coin names listed on CoinDCX futures (None if CoinDCX cannot be reached from here)"""
+    try:
+        d = VI.GET("https://api.coindcx.com/exchange/v1/derivatives/futures/data/active_instruments?margin_currency_short_name[]=USDT")
+        return {(p if isinstance(p, str) else p.get("pair", "")).split("-", 1)[-1].rsplit("_", 1)[0] for p in json.loads(d)} - {""} if d else None
+    except Exception:
+        return None
+
+
+def eval_candidate(coins, tag):
+    """alerts on every coin with the CURRENT settings. -> (summary dict, sample lines, pump lines)"""
+    n = hit = hit24 = pumps = caught = early = 0
+    days = 0.0
+    samples, plines = [], []
+    for sym, c in coins.items():
+        al = E.alerts_for(c).get("combined", [])
+        days += len(c) / 288
+        for i in al:
+            j = E.judge(c, i)
+            if not j:
+                continue
+            n += 1
+            hit += j["hit"]
+            b24 = (max(x["h"] for x in c[i + 1:i + 289]) / c[i]["c"] - 1) * 100
+            hit24 += b24 >= 20
+            samples.append((sym, utc(c[i]["t"]), j["best"], j["worst"], round(b24, 1)))
+        for p in (p for p in E.label_pumps(c) if p["start"] >= E.WARMUP):
+            pumps += 1
+            a = next((i for i in al if p["start"] - 6 <= i <= p["peak"]), None)
+            if a is None:
+                plines.append(f"MISSED {sym} bottom {utc(c[p['start']]['t'])} +{p['gain']}%")
+                continue
+            caught += 1
+            already = (c[a]["c"] / c[p["start"]]["l"] - 1) * 100
+            early += already <= 10
+            plines.append(f"caught {sym} bottom {utc(c[p['start']]['t'])} +{p['gain']}% alert {utc(c[a]['t'])} already +{already:.0f}%")
+    d = max(days / max(1, len(coins)), 1e-9)  # days per coin
+    return {"tag": tag, "alerts": n, "alerts_day": round(n / d, 1), "right10": round(100 * hit / n, 1) if n else None, "right20_24h": round(100 * hit24 / n, 1) if n else None,
+            "pumps": pumps, "pumps_day": round(pumps / d, 1), "caught": caught, "early": early}, samples, plines
+
+
+def universe(job):
+    end = dt.date.fromisoformat(job["end"]) if job.get("end") else dt.datetime.now(dt.timezone.utc).date() - dt.timedelta(days=2)
+    start = end - dt.timedelta(days=int(job.get("days", 5)) - 1)
+    syms = job.get("syms") or VI.list_symbols()
+    lines = [f"universe: {len(syms)} USDT perps on Binance Vision; days {start} to {end}"]
+    keep = [s for s in syms if s[:-4] not in MAJORS]
+    bases = dcx_bases() if job.get("dcx") else None
+    if bases:
+        plain = lambda b: b[7:] if b.startswith("1000000") else b[4:] if b.startswith("1000") else b
+        keep = [s for s in keep if s[:-4] in bases or plain(s[:-4]) in bases]
+        lines.append(f"restricted to coins also listed on CoinDCX futures ({len(bases)} there): {len(keep)} coins")
+    else:
+        lines.append("CoinDCX list not used (not requested or not reachable): all non-major Binance coins")
+    coins, notes = {}, 0
+
+    def one(s):
+        rows, _ = VI.fetch(s, start, end)
+        return s, rows
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        for s, rows in ex.map(one, keep):
+            if len(rows) > 400:
+                coins[s] = rows
+    lines.append(f"coins with data: {len(coins)} (download {time.time() - T0:.0f}s)")
+    res, first = [], None
+    for cand in job["candidates"]:
+        cfg.reset()
+        err = cfg.apply(cand.get("settings", {}))
+        if err:
+            raise ValueError(cand["tag"] + ": " + "; ".join(err))
+        r, samples, plines = eval_candidate(coins, cand["tag"])
+        res.append(r)
+        if first is None or cand.get("detail"):
+            first = (cand["tag"], samples, plines)
+        lines.append(f"done {cand['tag']} ({time.time() - T0:.0f}s)")
+    out = lines + ["", "candidate                     alerts/day  right(+10% in 6h)  right(+20% in 24h) | pumps/day  caught  early(<=10% up)"]
+    for r in res:
+        out.append(f"{r['tag'][:28]:28} {r['alerts_day']:10} {str(r['right10']):>17} {str(r['right20_24h']):>19} | {r['pumps_day']:9} {r['caught']:>3}/{r['pumps']:<4} {r['early']}")
+    out.append("alerts/day = over ALL coins together. right = share of alerts followed by that rise. pumps = real moves (label) found in the same data.")
+    tag, samples, plines = first
+    out += ["", f"PUMPS for candidate '{tag}':"] + plines[:80] + ["", f"SAMPLE ALERTS for '{tag}' (coin, time, best%, worst%, best in 24h%):"] + [str(x) for x in samples[:40]]
+    return "\n".join(out)
+
+
+T0 = time.time()
+
+
 def main(path):
     job = json.load(open(path))
     name = job.get("name", "run")
@@ -153,6 +244,11 @@ def main(path):
         err = cfg.apply(job.get("settings", {}))
         if err:
             raise ValueError("bad settings: " + "; ".join(err))
+        if job.get("mode") == "universe":
+            text = f"# {name}  (universe)\n```\n{universe(job)}\n```\n(took {time.time() - t0:.0f}s; real Binance Vision data)"
+            open(os.path.join(OUT, name + ".md"), "w").write(text)
+            print(text[:3000])
+            return
         coins = []
         for co in job["coins"]:
             rows, notes = VI.fetch(co["sym"] + "USDT", dt.date.fromisoformat(co["from"]), dt.date.fromisoformat(co["to"]))
