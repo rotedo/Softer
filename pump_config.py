@@ -6,7 +6,8 @@ import copy, math, os
 DATA_DIR = os.environ.get("PUMP_DATA_DIR") or os.path.join(os.path.dirname(os.path.abspath(os.environ.get("DB_PATH", "orderflow.db"))), "pump_data")
 
 # what counts as a pump (used to LABEL pumps in old data): price rises `pct` % within `window` candles (5m candles)
-PUMP = {"pct": 15.0, "window": 12}
+# merge_candles: after one pump, the same coin cannot start another labelled pump for this many candles (288 = at most ONE pump per coin-day)
+PUMP = {"pct": 15.0, "window": 12, "merge_candles": 0}
 # "find pumped coins" (Binance daily candles): coins whose best day in the last `days` days gained at least min_day_gain %
 FIND = {"days": 25, "min_day_gain": 30.0, "group_a": 25, "group_b": 60}
 # data downloaded around each pump day (open interest history exists only for the last 30 days on Binance)
@@ -40,8 +41,8 @@ _SECTIONS = ("PUMP", "FIND", "WINDOW", "EVAL", "STRATEGY_CONFIG", "LIVE", "FILTE
 _DEFAULT = copy.deepcopy({k: globals()[k] for k in _SECTIONS})
 _DEFAULT["MIN_STRATEGIES"] = MIN_STRATEGIES
 _INT = {"window", "horizon", "cooldown", "lookback", "base_candles", "bars", "breakout_candles", "group_a", "group_b", "days", "before_days",
-        "after_days", "workers", "klines", "cooldown_min", "MIN_STRATEGIES", "delay_s", "min_quote_vol_24h", "candles", "run_candles", "confirm_candles"}
-_RANGE = {"pct": (0.1, 10000), "window": (1, 288), "days": (1, 30), "min_day_gain": (1, 10000), "group_a": (0, 200), "group_b": (0, 400),
+        "after_days", "merge_candles", "workers", "klines", "cooldown_min", "MIN_STRATEGIES", "delay_s", "min_quote_vol_24h", "candles", "run_candles", "confirm_candles"}
+_RANGE = {"pct": (0.1, 10000), "window": (1, 288), "merge_candles": (0, 2000), "days": (1, 30), "min_day_gain": (1, 10000), "group_a": (0, 200), "group_b": (0, 400),
           "before_days": (0, 30), "after_days": (0, 30), "hit_pct": (0.1, 10000), "horizon": (1, 2000), "cooldown": (0, 2000), "lookback": (60, 1000),
           "volume_multiplier": (1, 1000), "base_candles": (5, 288), "min_buy_ratio": (0, 1), "min_return_pct": (0, 1000), "bars": (1, 50),
           "breakout_candles": (1, 288), "oi_change_percent": (0, 1000), "min_price_pct": (-100, 1000), "candles": (3, 576), "max_run_pct": (0, 100000), "run_candles": (3, 576), "min_candle_usd": (0, 1e9), "confirm_candles": (1, 6), "max_wick_ratio": (0, 1), "max_price_pct": (0, 1000), "multiplier": (1, 1000), "negative_below": (-1, 0), "positive_above": (0, 1),

@@ -25,7 +25,7 @@ def label_pumps(c):
                     break
             s = min(range(i, j + 1), key=lambda k: c[k]["l"])
             out.append({"start": s, "peak": j, "gain": round((c[j]["h"] / c[s]["l"] - 1) * 100, 1)})
-            i = j + 1
+            i = j + 1 + int(p.get("merge_candles", 0))
         else:
             i += 1
     return out
