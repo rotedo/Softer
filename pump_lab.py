@@ -276,6 +276,48 @@ def dcxcheck(job):
     return "\n".join(out)
 
 
+def history(job):
+    """LONG history study (months, not days): every CoinDCX-listed coin, find the days with a huge move (cfg.PUMP.pct), download ONLY those pump days
+    (+ days before) from Binance Vision (candles, open interest, funding, taker ratio: any age), then profile() shows which signals came before them."""
+    months = job["months"]  # completed months only, e.g. ["2026-05", "2026-06"]
+    syms = job.get("syms") or VI.list_symbols()
+    keep = [s for s in syms if s[:-4] not in MAJORS]
+    bases = dcx_bases() if job.get("dcx") else None
+    lines = [f"history study: months {months[0]} to {months[-1]}; pump = +{cfg.PUMP['pct']}% within {cfg.PUMP['window'] * STEP_MIN // 60}h, one per coin-day"]
+    if bases:
+        plain = lambda b: b[7:] if b.startswith("1000000") else b[4:] if b.startswith("1000") else b
+        keep = [s for s in keep if s[:-4] in bases or plain(s[:-4]) in bases]
+        lines.append(f"only coins also on CoinDCX futures: {len(keep)} coins")
+
+    def daily(s):
+        out = []
+        for m in months:
+            for r in VI._table(VI.GET(f"{VI.BASE}/monthly/klines/{s}/1d/{s}-1d-{m}.zip")):
+                if r and r[0].isdigit() and float(r[3]) > 0 and float(r[2]) / float(r[3]) >= 1 + cfg.PUMP["pct"] / 100:
+                    out.append((s, dt.datetime.fromtimestamp(int(r[0]) / 1000, dt.timezone.utc).date(), round((float(r[2]) / float(r[3]) - 1) * 100)))
+        return out
+    cand = []
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for r in ex.map(daily, keep):
+            cand += r
+    cand.sort(key=lambda x: -x[2])
+    lines.append(f"days with a daily range of +{cfg.PUMP['pct']}% or more (before the 5-minute check): {len(cand)} (download {time.time() - T0:.0f}s)")
+    cand = cand[:int(job.get("max_days", 150))]
+
+    def five(x):
+        s, d, _ = x
+        rows, notes = VI.fetch(s, d - dt.timedelta(days=int(job.get("before", 3))), d + dt.timedelta(days=1))
+        return {"sym": f"{s[:-4]}@{d:%m-%d}", "rows": rows, "notes": notes}
+    coins = []
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        for co in ex.map(five, cand):
+            if len(co["rows"]) > 200 and any(p["start"] >= 60 for p in E.label_pumps(co["rows"])):
+                coins.append(co)
+    lines.append(f"confirmed on 5-minute candles (a real +{cfg.PUMP['pct']}% run): {len(coins)} coin-days")
+    body, _ = profile(coins)
+    return "\n".join(lines) + "\n\n" + body
+
+
 def main(path):
     job = json.load(open(path))
     if isinstance(job, list):  # several jobs in one file, run one after the other
@@ -290,6 +332,11 @@ def main(path):
         err = cfg.apply(job.get("settings", {}))
         if err:
             raise ValueError("bad settings: " + "; ".join(err))
+        if job.get("mode") == "history":
+            text = f"# {name}  (history)\n```\n{history(job)}\n```\n(took {time.time() - t0:.0f}s; real Binance Vision data)"
+            open(os.path.join(OUT, name + ".md"), "w").write(text)
+            print(text[:3000])
+            return
         if job.get("mode") == "dcxcheck":
             text = f"# {name}\n```\n{dcxcheck(job)}\n```"
             open(os.path.join(OUT, name + ".md"), "w").write(text)
