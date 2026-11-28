@@ -205,10 +205,54 @@ def eval_candidate(coins, tag):
             already = (c[a]["c"] / c[p["start"]]["l"] - 1) * 100
             early += already <= 10
             plines.append(f"caught {sym} bottom {utc(c[p['start']]['t'])} +{p['gain']}% alert {utc(c[a]['t'])} already +{already:.0f}%")
+    eval_candidate.chosen = chosen
     d = max(days / max(1, len(coins)), 1e-9)  # days per coin
     samples.sort(key=lambda x: x[1])
     return {"tag": tag, "alerts": n, "alerts_day": round(n / d, 1), "right10": round(100 * hit / n, 1) if n else None, "right20_24h": round(100 * hit24 / n, 1) if n else None,
             "pumps": pumps, "pumps_day": round(pumps / d, 1), "caught": caught, "early": early}, samples, plines
+
+
+def trade_sim(coins, chosen, cap0=400.0, lev=5.0, risk=0.05, fee=0.001, slip=0.001, stop=0.01, tp=None, hold=72):
+    """take EVERY selected alert as a long trade, one at a time, entry at the alert candle's close (+slippage). Risk `risk` of capital per trade:
+    notional = min(lev x capital, risk x capital / stop). Stop first if stop and target are both inside one candle (pessimistic). Fee + slippage on both sides. No funding.
+    -> dict of results"""
+    ev = sorted((coins[sym][i]["t"], sym, i) for sym, l in chosen.items() for i, _, _ in l)
+    cap, peak, mdd, free_t = cap0, cap0, 0.0, 0
+    res = []
+    for t, sym, i in ev:
+        c = coins[sym]
+        if t < free_t or i + 1 >= len(c):
+            continue  # still in the previous trade
+        entry = c[i]["c"] * (1 + slip)
+        stop_px = entry * (1 - stop)
+        tp_px = entry * (1 + tp) if tp else None
+        notional = min(lev * cap, risk * cap / stop)
+        out, j = None, i
+        for j in range(i + 1, min(i + 1 + hold, len(c))):
+            if c[j]["l"] <= stop_px:
+                out = stop_px
+                break
+            if tp_px and c[j]["h"] >= tp_px:
+                out = tp_px
+                break
+        if out is None:
+            out = c[j]["c"]
+        out *= (1 - slip)
+        pnl = notional * (out / entry - 1) - 2 * fee * notional
+        cap += pnl
+        free_t = c[j]["t"]
+        peak = max(peak, cap)
+        mdd = max(mdd, (peak - cap) / peak)
+        res.append(pnl)
+        if cap <= 0:
+            break
+    w = [p > 0 for p in res]
+    ws = ls = a = b = 0
+    for x in w:
+        a, b = (a + 1, 0) if x else (0, b + 1)
+        ws, ls = max(ws, a), max(ls, b)
+    return {"trades": len(res), "wins": sum(w), "win%": round(100 * sum(w) / len(w)) if w else 0, "win_streak": ws, "lose_streak": ls,
+            "final": round(cap), "ret%": round(100 * (cap / cap0 - 1)), "maxdd%": round(100 * mdd)}
 
 
 def universe(job):
@@ -234,7 +278,7 @@ def universe(job):
             if len(rows) > 400:
                 coins[s] = rows
     lines.append(f"coins with data: {len(coins)} (download {time.time() - T0:.0f}s)")
-    res, first = [], None
+    res, first, sims = [], None, []
     for cand in job["candidates"]:
         cfg.reset()
         err = cfg.apply(job.get("settings", {})) or cfg.apply(cand.get("settings", {}))  # job-wide settings (e.g. the pump label) first, then this candidate's
@@ -244,6 +288,13 @@ def universe(job):
         res.append(r)
         if first is None or cand.get("detail"):
             first = (cand["tag"], samples, plines)
+        if cand.get("sim"):
+            sims.append(f"TRADE SIMULATION for '{cand['tag']}': start 400, 5x, risk 5%/trade, fee 0.1% + slippage 0.1% each side, no funding, one trade at a time, max hold 6h")
+            sims.append("stop%  take-profit | trades wins win% win-streak lose-streak | final  return%  max-drawdown%")
+            for st in (0.01, 0.02, 0.03, 0.05):
+                for tp in (0.05, 0.10, 0.20, None):
+                    q = trade_sim(coins, eval_candidate.chosen, stop=st, tp=tp)
+                    sims.append(f"{int(st * 100):>4}  {('+%d%%' % int(tp * 100)) if tp else 'none':>11} | {q['trades']:>6} {q['wins']:>4} {q['win%']:>4} {q['win_streak']:>10} {q['lose_streak']:>11} | {q['final']:>5} {q['ret%']:>7} {q['maxdd%']:>13}")
         lines.append(f"done {cand['tag']} ({time.time() - T0:.0f}s)")
     out = lines + ["", "candidate                     alerts/day  right(+10% in 6h)  right(+20% in 24h) | pumps/day  caught  early(<=10% up)"]
     for r in res:
@@ -251,7 +302,7 @@ def universe(job):
     out.append("alerts/day = over ALL coins together. right = share of alerts followed by that rise. pumps = real moves (label) found in the same data.")
     tag, samples, plines = first
     out += ["", f"PUMPS for candidate '{tag}':"] + plines[:80] + ["", f"SAMPLE ALERTS for '{tag}' (coin, time, best%, worst%, best in 24h%):"] + [str(x) for x in samples[:60]]
-    return "\n".join(out)
+    return "\n".join(sims + [""] + out)
 
 
 T0 = time.time()
