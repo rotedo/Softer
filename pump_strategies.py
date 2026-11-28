@@ -73,6 +73,37 @@ def funding_rate(c, conf):
     return fr <= conf["negative_below"] or fr >= conf["positive_above"], f"funding {fr * 100:+.3f}%"
 
 
+@strategy("oi_build")
+def oi_build(c, conf):
+    k = int(conf["candles"])
+    if len(c) < k + 1 or c[-1].get("oi") is None or c[-1 - k].get("oi") is None or c[-1 - k]["oi"] <= 0:
+        return False, "no open-interest data"
+    ch = (c[-1]["oi"] / c[-1 - k]["oi"] - 1) * 100
+    px = (c[-1]["c"] / c[-1 - k]["c"] - 1) * 100
+    return ch >= conf["oi_change_percent"] and px <= conf["max_price_pct"], f"open interest {ch:+.1f}% while price {px:+.1f}% over {k} candles"
+
+
+@strategy("trades_spike")
+def trades_spike(c, conf):
+    n = int(conf["base_candles"])
+    if len(c) < n + 1 or c[-1].get("n") is None:
+        return False, "no trade-count data"
+    avg = sum(x["n"] for x in c[-n - 1:-1]) / n
+    m = c[-1]["n"] / avg if avg > 0 else 0
+    return m >= conf["multiplier"] and c[-1]["c"] > c[-1]["o"], f"trades {m:.1f}x average"
+
+
+@strategy("range_expansion")
+def range_expansion(c, conf):
+    n = int(conf["base_candles"])
+    if len(c) < n + 1:
+        return False, "not enough candles"
+    rg = lambda x: (x["h"] - x["l"]) / x["o"] if x["o"] > 0 else 0
+    avg = sum(rg(x) for x in c[-n - 1:-1]) / n
+    m = rg(c[-1]) / avg if avg > 0 else 0
+    return m >= conf["multiplier"] and c[-1]["c"] > c[-1]["o"], f"candle range {m:.1f}x average"
+
+
 # ---------------- YOUR OWN SETUPS (written in pump_custom.py) ----------------
 CUSTOM, CUSTOM_ERROR = {}, ""
 

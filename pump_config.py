@@ -21,6 +21,10 @@ STRATEGY_CONFIG = {
     "price_momentum": {"enabled": True, "min_return_pct": 2.0, "bars": 3, "breakout_candles": 24},
     "open_interest": {"enabled": True, "oi_change_percent": 5.0, "min_price_pct": 0.0},
     "funding_rate": {"enabled": True, "negative_below": -0.0002, "positive_above": 0.0008},
+    # extra sensors, OFF until the lab shows they help
+    "oi_build": {"enabled": False, "candles": 48, "oi_change_percent": 3.0, "max_price_pct": 5.0},
+    "trades_spike": {"enabled": False, "multiplier": 3.0, "base_candles": 48},
+    "range_expansion": {"enabled": False, "multiplier": 4.0, "base_candles": 48},
 }
 MIN_STRATEGIES = 2  # alert only when at least this many sensors agree at the same time
 # live scanner (CoinDCX 5m candles for every coin, other exchanges only for data)
@@ -30,11 +34,11 @@ _SECTIONS = ("PUMP", "FIND", "WINDOW", "EVAL", "STRATEGY_CONFIG", "LIVE")
 _DEFAULT = copy.deepcopy({k: globals()[k] for k in _SECTIONS})
 _DEFAULT["MIN_STRATEGIES"] = MIN_STRATEGIES
 _INT = {"window", "horizon", "cooldown", "lookback", "base_candles", "bars", "breakout_candles", "group_a", "group_b", "days", "before_days",
-        "after_days", "workers", "klines", "cooldown_min", "MIN_STRATEGIES", "delay_s", "min_quote_vol_24h"}
+        "after_days", "workers", "klines", "cooldown_min", "MIN_STRATEGIES", "delay_s", "min_quote_vol_24h", "candles"}
 _RANGE = {"pct": (0.1, 10000), "window": (1, 288), "days": (1, 30), "min_day_gain": (1, 10000), "group_a": (0, 200), "group_b": (0, 400),
           "before_days": (0, 30), "after_days": (0, 30), "hit_pct": (0.1, 10000), "horizon": (1, 2000), "cooldown": (0, 2000), "lookback": (60, 1000),
           "volume_multiplier": (1, 1000), "base_candles": (5, 288), "min_buy_ratio": (0, 1), "min_return_pct": (0, 1000), "bars": (1, 50),
-          "breakout_candles": (1, 288), "oi_change_percent": (0, 1000), "min_price_pct": (-100, 1000), "negative_below": (-1, 0), "positive_above": (0, 1),
+          "breakout_candles": (1, 288), "oi_change_percent": (0, 1000), "min_price_pct": (-100, 1000), "candles": (3, 576), "max_price_pct": (0, 1000), "multiplier": (1, 1000), "negative_below": (-1, 0), "positive_above": (0, 1),
           "MIN_STRATEGIES": (1, 10), "min_quote_vol_24h": (0, 1e12), "workers": (1, 16), "cooldown_min": (0, 1440), "klines": (60, 500), "delay_s": (0, 120)}
 
 

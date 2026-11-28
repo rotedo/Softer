@@ -1,0 +1,26 @@
+name: pump-lab
+# Runs the pump lab on GitHub's machines (real Binance Vision data) whenever lab/job.json changes, and writes lab_results/<name>.md back.
+on:
+  push:
+    paths: ["lab/job.json"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  lab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run lab
+        run: python pump_lab.py lab/job.json
+      - name: Save result
+        run: |
+          git config user.name "pump-lab"
+          git config user.email "pump-lab@users.noreply.github.com"
+          git add lab_results
+          git commit -m "lab result" || exit 0
+          for i in 1 2 3; do git pull --rebase origin main && git push origin HEAD:main && break || sleep 5; done

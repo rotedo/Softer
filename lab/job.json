@@ -1,0 +1,9 @@
+{"name": "stage1_profile", "mode": "profile",
+ "settings": {"PUMP": {"pct": 20, "window": 288}},
+ "coins": [
+  {"sym": "VELVET", "from": "2026-11-12", "to": "2026-11-27"},
+  {"sym": "FET", "from": "2026-11-19", "to": "2026-11-27"},
+  {"sym": "ONE", "from": "2026-10-31", "to": "2026-11-10"},
+  {"sym": "BIGTIME", "from": "2026-11-18", "to": "2026-11-27"},
+  {"sym": "CFG", "from": "2026-11-19", "to": "2026-11-27"}
+ ]}
