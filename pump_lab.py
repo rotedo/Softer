@@ -215,7 +215,7 @@ def universe(job):
     res, first = [], None
     for cand in job["candidates"]:
         cfg.reset()
-        err = cfg.apply(cand.get("settings", {}))
+        err = cfg.apply(job.get("settings", {})) or cfg.apply(cand.get("settings", {}))  # job-wide settings (e.g. the pump label) first, then this candidate's
         if err:
             raise ValueError(cand["tag"] + ": " + "; ".join(err))
         r, samples, plines = eval_candidate(coins, cand["tag"])
