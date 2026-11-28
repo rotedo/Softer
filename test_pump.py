@@ -105,6 +105,7 @@ assert D.cleanup() == 1 and D.load("AAAUSDT") is None
 ok("find pumps, fetch with OI + funding, csv, save/load/cleanup")
 
 # ---------- engine: labels, alerts, no future ----------
+cfg.apply({"MIN_STRATEGIES": 2})  # these fake-data checks were written for 2 agreeing sensors (the live default is now 3)
 pumps = E.label_pumps(rows)
 assert len(pumps) == 1 and pumps[0]["gain"] > 70, pumps
 res = E.run_coin(rows)
@@ -181,6 +182,8 @@ import pump_live as _pl
 _pl.set_on(False)
 sets_ = V._sets("a")
 assert not isinstance(sets_, str) and sets_
+cfg.apply({"MIN_STRATEGIES": 2, "PUMP": {"pct": 15, "window": 12, "merge_candles": 0}})  # fake-data test was built for the old numbers
+snap = cfg.snapshot()
 sw = E.sweep([cs for _, cs in sets_], progress=lambda m: None)
 assert cfg.snapshot() == snap, "sweep must restore the numbers"
 assert any(r["param"] == "volume_multiplier" and r["pumps"] > 0 and r["caught"] == r["pumps"] for r in sw) and sum(1 for r in sw if r["current"]) == len(E.SWEEP_GRID)
@@ -285,7 +288,7 @@ assert json.loads(b)["errors"]
 c, _, b, _ = call("/pump/settings/save?json=" + json.dumps({"PUMP": {"pct": "22"}}))
 assert json.loads(b)["errors"] == [] and cfg.PUMP["pct"] == 22.0
 call("/pump/settings/reset")
-assert cfg.PUMP["pct"] == 15.0
+assert cfg.PUMP["pct"] == 30.0
 D.HTTP = fake_http
 day = time.strftime("%Y-%m-%d", time.gmtime(PUMP_DAY / 1000))
 c, ct, b, extra = call(f"/pump/download?sym=AAAUSDT&day={day}&before=5&after=2&iv=5m&oi=1&fr=1")
@@ -306,7 +309,7 @@ ok("web routes: page, status, settings, download CSV, coins, groups, login requi
 import pump_ai
 r = pump_ai.TOOLS["pump_data"](None, sym="AAA", day=day, before=5, after=2, interval="5m")
 assert r["rows"] == 8 * 288 and r["pumps_found"] and "before_first_pump" in r and r["download_link_for_user"].startswith("/pump/download")
-assert pump_ai.TOOLS["pump_settings"](None)["MIN_STRATEGIES"] == 2
+assert pump_ai.TOOLS["pump_settings"](None)["MIN_STRATEGIES"] == 3
 assert pump_ai.TOOLS["pump_settings_set"](None, changes={"EVAL": {"hit_pct": 12}})["errors"] == "saved"
 ok("AI tools: pump_data summary + settings")
 print("\nALL TESTS PASSED (fake data only)")

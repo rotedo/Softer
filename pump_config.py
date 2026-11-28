@@ -7,14 +7,14 @@ DATA_DIR = os.environ.get("PUMP_DATA_DIR") or os.path.join(os.path.dirname(os.pa
 
 # what counts as a pump (used to LABEL pumps in old data): price rises `pct` % within `window` candles (5m candles)
 # merge_candles: after one pump, the same coin cannot start another labelled pump for this many candles (288 = at most ONE pump per coin-day)
-PUMP = {"pct": 15.0, "window": 12, "merge_candles": 0}
+PUMP = {"pct": 30.0, "window": 288, "merge_candles": 288}
 # "find pumped coins" (Binance daily candles): coins whose best day in the last `days` days gained at least min_day_gain %
 FIND = {"days": 25, "min_day_gain": 30.0, "group_a": 25, "group_b": 60}
 # data downloaded around each pump day (open interest history exists only for the last 30 days on Binance)
 WINDOW = {"before_days": 5, "after_days": 2}
 # how an alert is judged: hit = price goes up hit_pct % within horizon candles; cooldown = candles of silence after an alert;
 # lookback = how many past candles a strategy may see (never future ones)
-EVAL = {"hit_pct": 10.0, "horizon": 72, "cooldown": 24, "lookback": 300}
+EVAL = {"hit_pct": 10.0, "horizon": 72, "cooldown": 288, "lookback": 300}
 # the sensors of the turbine. Add one = one function in pump_strategies.py + one entry here.
 # funding numbers are fractions (-0.0002 = -0.02%). min_buy_ratio 0 = ignore buyer share (CoinDCX candles do not carry it)
 STRATEGY_CONFIG = {
@@ -33,9 +33,9 @@ STRATEGY_CONFIG = {
 #  confirm_candles: sensors must agree on this many candles in a row (1 = off; 2 removes one-candle spikes)
 #  max_wick_ratio: skip if the last candle closed far below its high (share of the candle range given back; 1 = off)
 FILTER = {"max_run_pct": 15.0, "run_candles": 36, "min_candle_usd": 3000.0, "confirm_candles": 1, "max_wick_ratio": 0.6}
-MIN_STRATEGIES = 2  # alert only when at least this many sensors agree at the same time
+MIN_STRATEGIES = 3  # alert only when at least this many sensors agree at the same time
 # live scanner (CoinDCX 5m candles for every coin, other exchanges only for data)
-LIVE = {"min_quote_vol_24h": 2000000, "workers": 8, "cooldown_min": 60, "klines": 60, "delay_s": 8}
+LIVE = {"min_quote_vol_24h": 2000000, "workers": 8, "cooldown_min": 1440, "klines": 60, "delay_s": 8}
 
 _SECTIONS = ("PUMP", "FIND", "WINDOW", "EVAL", "STRATEGY_CONFIG", "LIVE", "FILTER")
 _DEFAULT = copy.deepcopy({k: globals()[k] for k in _SECTIONS})
