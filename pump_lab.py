@@ -235,8 +235,32 @@ def universe(job):
 T0 = time.time()
 
 
+def dcxcheck(job):
+    """does CoinDCX give OLD 5m futures candles? ask for ranges far back and report what comes back"""
+    out = ["CoinDCX futures 5m candles: how far back does the public API go?"]
+    now = int(time.time())
+    for pair in job.get("pairs", ["B-BTC_USDT", "B-BULLA_USDT", "B-ACE_USDT"]):
+        for days in job.get("back", [1, 7, 30, 90, 180, 365]):
+            t1 = now - (days - 1) * 86400
+            t0_ = t1 - 86400  # one day window that far back
+            try:
+                d = json.loads(VI.GET(f"https://public.coindcx.com/market_data/candlesticks?pair={pair}&from={t0_}&to={t1}&resolution=5&pcode=f"))
+                rows = d["data"] if isinstance(d, dict) else d
+                tt = sorted(int(k["time"]) for k in rows)
+                tt = [x // 1000 if x > 1e11 else x for x in tt]
+                out.append(f"{pair} {days:4}d back: {len(rows):4} candles" + (f", {time.strftime('%Y-%m-%d %H:%M', time.gmtime(tt[0]))} to {time.strftime('%Y-%m-%d %H:%M', time.gmtime(tt[-1]))} UTC" if rows else ""))
+            except Exception as e:
+                out.append(f"{pair} {days:4}d back: FAILED {type(e).__name__}: {str(e)[:100]}")
+    return "\n".join(out)
+
+
 def main(path):
     job = json.load(open(path))
+    if isinstance(job, list):  # several jobs in one file, run one after the other
+        for j in job:
+            json.dump(j, open("/tmp/_job.json", "w"))
+            main("/tmp/_job.json")
+        return
     name = job.get("name", "run")
     os.makedirs(OUT, exist_ok=True)
     t0 = time.time()
@@ -244,6 +268,11 @@ def main(path):
         err = cfg.apply(job.get("settings", {}))
         if err:
             raise ValueError("bad settings: " + "; ".join(err))
+        if job.get("mode") == "dcxcheck":
+            text = f"# {name}\n```\n{dcxcheck(job)}\n```"
+            open(os.path.join(OUT, name + ".md"), "w").write(text)
+            print(text[:3000])
+            return
         if job.get("mode") == "universe":
             text = f"# {name}  (universe)\n```\n{universe(job)}\n```\n(took {time.time() - t0:.0f}s; real Binance Vision data)"
             open(os.path.join(OUT, name + ".md"), "w").write(text)
