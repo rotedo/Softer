@@ -1,9 +1,1 @@
-{"name": "stage1_profile", "mode": "profile",
- "settings": {"PUMP": {"pct": 20, "window": 288}},
- "coins": [
-  {"sym": "VELVET", "from": "2026-11-12", "to": "2026-11-27"},
-  {"sym": "FET", "from": "2026-11-19", "to": "2026-11-27"},
-  {"sym": "ONE", "from": "2026-10-31", "to": "2026-11-10"},
-  {"sym": "BIGTIME", "from": "2026-11-18", "to": "2026-11-27"},
-  {"sym": "CFG", "from": "2026-11-19", "to": "2026-11-27"}
- ]}
+{"name":"stage2_A_defaults","mode":"test","settings":{"PUMP":{"pct":20,"window":288},"EVAL":{"horizon":144}},"sweep":false,"coins":[{"sym":"BLUR","from":"2026-11-14","to":"2026-11-26"},{"sym":"EVAA","from":"2026-11-08","to":"2026-11-26"},{"sym":"MMT","from":"2026-11-11","to":"2026-11-26"},{"sym":"LISTA","from":"2026-11-16","to":"2026-11-26"},{"sym":"ICNT","from":"2026-11-11","to":"2026-11-26"}]}
