@@ -1,2 +1,10 @@
-{"name":"stage3_final_frozen","mode":"test","settings":{"PUMP":{"pct":20,"window":288},"EVAL":{"horizon":144},"STRATEGY_CONFIG":{"volume_spike":{"volume_multiplier":4},"price_momentum":{"min_return_pct":3},"open_interest":{"oi_change_percent":4}}},"sweep":false,
-"coins":[{"sym":"HAEDAL","from":"2026-11-21","to":"2026-11-27"},{"sym":"INIT","from":"2026-11-20","to":"2026-11-27"},{"sym":"PORTAL","from":"2026-11-21","to":"2026-11-27"},{"sym":"FET","from":"2026-11-19","to":"2026-11-27"},{"sym":"BULLA","from":"2026-11-16","to":"2026-11-27"}]}
+{"name":"universe1","mode":"universe","days":5,"end":"2026-11-26","dcx":true,
+ "settings":{"PUMP":{"pct":20,"window":288},"EVAL":{"horizon":72}},
+ "candidates":[
+  {"tag":"C0 no filters, 2 sensors","settings":{"FILTER":{"max_run_pct":0,"min_candle_usd":0,"max_wick_ratio":1,"confirm_candles":1}}},
+  {"tag":"C1 filters on, 2 sensors","settings":{},"detail":true},
+  {"tag":"C2 filters, 3 sensors","settings":{"MIN_STRATEGIES":3}},
+  {"tag":"C3 filters, confirm 2","settings":{"FILTER":{"confirm_candles":2}}},
+  {"tag":"C4 confirm 2, 3 sensors","settings":{"MIN_STRATEGIES":3,"FILTER":{"confirm_candles":2}}},
+  {"tag":"C5 strict numbers","settings":{"STRATEGY_CONFIG":{"volume_spike":{"volume_multiplier":5},"price_momentum":{"min_return_pct":3},"open_interest":{"oi_change_percent":5}},"FILTER":{"confirm_candles":2,"max_run_pct":12}}}
+ ]}
