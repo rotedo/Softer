@@ -267,7 +267,7 @@ assert cs[-1]["fr"] == -0.001
 import pump_custom
 pump_custom.ENABLED = True
 sent.clear()
-L.ST["last_alert"].clear()
+L.ST["last_alert"].clear(); L.ST["selector"].sent.clear()
 assert L.cycle() == 2 and any("MY SETUP example_big_green: AAA" in t for t in sent) and any("PUMP ALERT AAA" in t for t in sent), sent
 assert L.status()["custom"] == ["example_big_green"] and L.status()["custom_error"] == ""
 pump_custom.ENABLED = False
@@ -312,4 +312,19 @@ assert r["rows"] == 8 * 288 and r["pumps_found"] and "before_first_pump" in r an
 assert pump_ai.TOOLS["pump_settings"](None)["MIN_STRATEGIES"] == 3
 assert pump_ai.TOOLS["pump_settings_set"](None, changes={"EVAL": {"hit_pct": 12}})["errors"] == "saved"
 ok("AI tools: pump_data summary + settings")
+
+# ---------- cross-coin selector ----------
+import pump_select as _SEL
+cfg.reset()
+_s = _SEL.Selector()
+_b, _o, _ = _s.step(1_000_000, [("A", 5), ("B", 9)])
+assert _b[0] == "B" and [x[0] for x in _o] == ["A"], "best of linked coins wins"
+assert _s.step(1_000_000 + 60_000 * 30, [("C", 50)])[0] is None, "pause after an alert"
+assert _SEL.Selector().step(5, [(str(i), 1) for i in range(10)])[0] is None, "market-wide move sends nothing"
+_s2 = _SEL.Selector()
+for k in range(3):
+    assert _s2.step(k * 7_200_000 + 7_200_000, [("X", 1)])[0] is not None
+assert _s2.step(4 * 7_200_000 + 1, [("X", 1)])[0] is None, "daily limit"
+cfg.reset()
+ok("selector: best linked coin, pause, market-wide, daily limit (fake data)")
 print("\nALL TESTS PASSED (fake data only)")

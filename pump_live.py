@@ -9,11 +9,12 @@ from concurrent.futures import ThreadPoolExecutor
 import pump_config as cfg
 import pump_download as D
 import pump_strategies as S
+import pump_select as SEL
 
 DCX, DCX_PUB = "https://api.coindcx.com", "https://public.coindcx.com"
 STEP = 300_000
 MAJORS = {"BTC", "ETH", "BNB", "XRP", "SOL", "USDC"}
-ST = {"watch": {}, "on": None, "cycles": 0, "coins": 0, "caught": 0, "last_cycle_s": None, "last_error": "", "recent": [], "last_alert": {}}
+ST = {"watch": {}, "on": None, "cycles": 0, "coins": 0, "caught": 0, "last_cycle_s": None, "last_error": "", "recent": [], "last_alert": {}, "selector": SEL.Selector(), "skipped": []}
 U = {"t": 0, "pairs": [], "bn": {}, "bn_vol": {}}  # universe cache (refreshed hourly)
 
 
@@ -304,6 +305,7 @@ def cycle():
             pass
         byb = bybit_funding()
     sent = 0
+    cands = []  # coins whose sensors + garbage filters agree right now
     for pair, c, hit, mine in stage2:
         for name, note in mine.items():  # your own setups (pump_custom.py): alert on their own
             key = (pair, name)
@@ -320,17 +322,30 @@ def cycle():
             continue
         if time.time() - ST["last_alert"].get(pair, 0) < cfg.LIVE["cooldown_min"] * 60:
             continue
+        cands.append((pair, S.strength(c), c, res))
+    # cross-coin selection (same code as the backtest): best of the coins firing together, daily cap, pause, market-wide filter
+    best, others, why = ST["selector"].step(int(time.time() * 1000), [(x[0], x[1]) for x in cands])
+    if cands and not best and cfg.SELECT["enabled"]:
+        ST["skipped"].insert(0, {"ts": int(time.time() * 1000), "coins": [base(x[0]) for x in cands][:8], "why": why})
+        del ST["skipped"][20:]
+    for pair, strength, c, res in cands:
+        if cfg.SELECT["enabled"] and (not best or pair != best[0]):
+            continue
+        linked = [base(o[0]) for o in others] if cfg.SELECT["enabled"] else []
         ST["last_alert"][pair] = time.time()
-        ST["watch"].setdefault(pair, {"since": now, "seen": now, "sensors": hit, "alerted": True})["alerted"] = True
+        ST["watch"].setdefault(pair, {"since": now, "seen": now, "sensors": [], "alerted": True})["alerted"] = True
         imb = book_imbalance(pair)
         text = alert_text(pair, c, res, imb)
+        if linked:
+            text += "\nजुड़े coins (साथ में फायर हुए, ये नहीं चुने): " + ", ".join(linked)
+        text += f"\nताकत: {strength}"
         _tg(text)
         reasons = {k: n_ for k, (b, n_) in res.items() if b}
         ST["recent"].insert(0, {"ts": int(time.time() * 1000), "sym": base(pair), "score": round(100 * len(reasons) / max(1, len(res))), "price": c[-1]["c"], "reasons": reasons})
         low = min(x["l"] for x in c[-int(cfg.FILTER["run_candles"]):])
         _jload()
         JOURNAL.insert(0, {"ts": int(c[-1]["t"] + STEP), "pair": pair, "sym": base(pair), "price": c[-1]["c"], "reasons": reasons,
-                           "feat": {"imb": imb, "run": round((c[-1]["c"] / low - 1) * 100, 1), "fr": c[-1].get("fr")}})
+                           "feat": {"imb": imb, "run": round((c[-1]["c"] / low - 1) * 100, 1), "fr": c[-1].get("fr"), "strength": strength, "linked": linked}})
         del JOURNAL[100:]
         _jsave()
         ST["caught"] += 1
